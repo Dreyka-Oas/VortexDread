@@ -1,0 +1,20 @@
+{
+  "tornado_roar": {
+    "category": "weather",
+    "sounds": [
+      {
+        "name": "vortexdread:tornado_roar",
+        "stream": false
+      }
+    ]
+  },
+  "tornado_rumble": {
+    "category": "weather",
+    "sounds": [
+      {
+        "name": "vortexdread:tornado_rumble",
+        "stream": false
+      }
+    ]
+  }
+}
