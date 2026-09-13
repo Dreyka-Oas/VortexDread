@@ -178,7 +178,10 @@ float ringDensity(vec3 p, float roughness) {
     // swallows the funnel it is supposed to be standing under.
     float lid = coreRadius * (0.35 + 0.6 * groundLoad)
               * (1.0 - 0.72 * smoothstep(0.1, 1.0, radius / outer));
-    float stack = 1.0 - smoothstep(lid * (0.2 + 0.35 * roughness), lid * (1.1 + 0.7 * roughness), above);
+    // The column's own grain only leans on the stack here rather than setting it. Driving both ends of
+    // the fade from one smooth field draws its level sets across the whole dust plane, which reads as
+    // contour lines on a map and not as anything a storm does.
+    float stack = 1.0 - smoothstep(lid * (0.35 + 0.18 * roughness), lid * (1.25 + 0.35 * roughness), above);
     float edge = smoothstep(outer, outer * 0.62, radius);
 
     // Under the funnel's own ground the dust keeps going and thins: what is behind terrain is hidden by
@@ -214,17 +217,19 @@ float wallCloudDensity(vec3 p) {
 
     vec2 offset = p.xz - axisXZ;
     float radius = length(offset);
-    float reach = coreRadius * WALL_REACH;
-    if (radius > reach) {
-        return 0.0;
-    }
-
     // Its own grain, at the scale of the thing rather than at the scale of the column's striations,
     // and turning with it. Borrowing the column's noise here gives a disc with fine stripes on it,
     // which is the shape nobody has ever photographed.
     float turn = GameTime * 2400.0 * 0.09;
     vec2 spun = mat2(cos(turn), -sin(turn), sin(turn), cos(turn)) * offset;
     float lumps = fbm(vec3(spun, p.y * 1.4) * (1.6 / max(coreRadius, 1.0))) - 0.5;
+
+    // The edge is torn rather than drawn: a lowering that ends on a circle reads as a saucer parked
+    // over the field, and no photograph of one has that shape.
+    float reach = coreRadius * WALL_REACH * (1.0 + 1.6 * lumps);
+    if (radius > reach) {
+        return 0.0;
+    }
 
     // Lowest against the funnel and rising outward: a base being drawn down, not a disc parked under
     // the cloud.
@@ -233,8 +238,10 @@ float wallCloudDensity(vec3 p) {
 
     // Nothing ends on a flat lid. Above the nominal deck the mass thins out over its own depth, which
     // is where the pack's clouds or the game's take the picture over.
-    float cap = 1.0 - smoothstep(0.0, rise, -below);
-    float rim = smoothstep(reach, reach * 0.45, radius);
+    float cap = 1.0 - smoothstep(rise * 0.05, rise * 1.2, -below);
+    // Ramped the whole way in rather than plateauing: a lowering that holds one density out to a fixed
+    // fraction of its reach has a brim, and a brim on a cloud is a hat.
+    float rim = smoothstep(reach, reach * 0.12, radius);
 
     // It is already turning before anything comes out of it, and it stays after the funnel has roped
     // out, so it does not follow the descent the way the condensation does.
@@ -280,11 +287,25 @@ float funnelDensity(vec3 p, out float dustShare) {
                 + vec3(0.0, (p.y * 0.16 - GameTime * 900.0) * fineness, 0.0);
     float roughness = fbm(sample) - 0.5;
 
+    // A violent tornado rarely turns as one column. Two to five smaller vortices orbit the axis inside
+    // the parent circulation and turn faster than it does, and that braid is what tells a photograph of
+    // an EF4 from a photograph of an EF1. They live low, where the inflow is fastest and the pressure
+    // drop steepest, and they need a parent wide enough to hold more than one. The core radius is the
+    // absolute measure of that width: the wind fraction is read against each storm's own peak, so a
+    // mature EF1 reads the same there as a mature EF5 and would braid just as hard.
+    float violence = smoothstep(14.0, 40.0, coreRadius);
+    float suctionCount = floor(2.0 + 3.0 * violence);
+    float suctionRoom = smoothstep(0.62, 0.16, h) * violence * smoothstep(0.42, 0.80, windFraction);
+    // Leaning with height, because each one is a vortex in its own right riding the parent's updraught
+    // and trailing behind where it started.
+    float braid = angle * suctionCount - GameTime * 2400.0 * 2.3 + (p.y - groundY) * 0.06;
+    float suction = (0.5 + 0.5 * cos(braid)) * suctionRoom;
+
     // The striations have to bite. A funnel photographed at any distance is visibly made of separate
     // ropes of condensate winding round each other, and a wall that is only gently perturbed reads as
     // a smooth grey pipe however well it is lit.
-    float edge = wall * (1.0 + 0.62 * roughness * (1.4 - h));
-    float sheath = smoothstep(edge * 1.05, edge * 0.6, radius);
+    float edge = wall * (1.0 + 0.62 * roughness * (1.4 - h) + 0.34 * suction);
+    float sheath = smoothstep(edge * 1.05, edge * 0.6, radius) * (1.0 + 1.0 * suction);
 
     // Hollow only well up the column. Down where the inflow arrives it is full of what it has picked
     // up, and a funnel drawn as a tube all the way to the ground shows daylight through its middle.
@@ -415,7 +436,13 @@ void main() {
             continue;
         }
         float sigma = density * EXTINCTION * stepSize;
-        float lit = density > LIT_THRESHOLD ? lightTransmittance(p, funnelHeight / 48.0) : 1.0;
+        // A second march per sample is the most expensive thing in this loop, and it is paid on every
+        // pixel of a funnel that fills the screen. Past this depth the sample is scaled by so little
+        // transmittance that whatever shading the march would return cannot be told from a constant.
+        float lit = 1.0;
+        if (density > LIT_THRESHOLD) {
+            lit = transmittance > 0.15 ? lightTransmittance(p, funnelHeight / 48.0) : 0.45;
+        }
 
         // The column is shadowed by itself, which is what gives it its volume. The dust at the foot is
         // not: it sits in open light on every side, and shading it as if the funnel were standing on it

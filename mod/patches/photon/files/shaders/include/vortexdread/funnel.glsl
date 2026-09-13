@@ -53,8 +53,8 @@ const float vortexdread_ring_reach = 1.25;
 const float vortexdread_ring_swell = 0.9;
 const float vortexdread_ring_rough = 1.3;
 const float vortexdread_ring_drop = 0.9;
-const float vortexdread_wall_reach = 2.3;
-const float vortexdread_wall_hang = 0.13;
+const float vortexdread_wall_reach = 1.9;
+const float vortexdread_wall_hang = 0.24;
 const float vortexdread_wall_rise = 1.4;
 
 // The mass overhead, both measured in funnel heights, and how many samples it is worth. Few,
@@ -249,7 +249,10 @@ float vortexdread_ring_density(VortexdreadFunnel f, vec3 p, float roughness, flo
 
     float lid = f.core_radius * (0.35 + 0.6 * f.ground_load)
               * (1.0 - 0.72 * smoothstep(0.1, 1.0, radius / outer));
-    float stack = 1.0 - smoothstep(lid * (0.2 + 0.35 * roughness), lid * (1.1 + 0.7 * roughness), above);
+    // The column's own grain only leans on the stack here rather than setting it. Driving both ends of
+    // the fade from one smooth field draws its level sets across the whole dust plane, which reads as
+    // contour lines on a map and not as anything a storm does.
+    float stack = 1.0 - smoothstep(lid * (0.35 + 0.18 * roughness), lid * (1.25 + 0.35 * roughness), above);
     float edge = smoothstep(outer, outer * 0.62, radius);
     float under = above < 0.0 ? 1.0 - smoothstep(0.0, drop, -above) : 1.0;
 
@@ -278,10 +281,14 @@ float vortexdread_wall_cloud_density(VortexdreadFunnel f, vec3 p, float clock) {
     float turn = clock * 0.09;
     vec2 spun = mat2(cos(turn), -sin(turn), sin(turn), cos(turn)) * offset;
     float lumps = vortexdread_fbm(vec3(spun, p.y * 1.4) * (1.6 / max(f.core_radius, 1.0))) - 0.5;
+    // A second grain, four times finer. One octave at the scale of the whole lowering only bends its
+    // outline, and the underside stays a surface: what it has instead is a stack of ragged shelves,
+    // and those live at a fraction of the size of the thing they hang off.
+    float shred = vortexdread_fbm(vec3(spun, p.y * 2.8) * (6.4 / max(f.core_radius, 1.0))) - 0.5;
 
     // The edge is torn rather than drawn: a lowering that ends on a circle reads as a saucer parked
     // over the field, which is the one shape no photograph of one has.
-    float reach = f.core_radius * vortexdread_wall_reach * (1.0 + 0.75 * lumps);
+    float reach = f.core_radius * vortexdread_wall_reach * (1.0 + 1.6 * lumps);
     if (radius > reach) {
         return 0.0;
     }
@@ -289,13 +296,17 @@ float vortexdread_wall_cloud_density(VortexdreadFunnel f, vec3 p, float clock) {
     // Nearly all of the thickness is gone by the rim, which is what makes the shape a bowl hanging off
     // the base rather than a plate resting under it. A lowering keeps a fraction of its depth out
     // there, and that fraction is the whole difference between a wall cloud and a saucer.
-    float lip = hang * (1.0 - 0.88 * smoothstep(0.0, 1.0, radius / reach)) * (1.0 + 1.5 * lumps);
+    float lip = hang * (1.0 - 0.88 * smoothstep(0.0, 1.0, radius / reach))
+              * (1.0 + 1.5 * lumps + 0.9 * shred);
     float body = 1.0 - smoothstep(lip * 0.08, lip * 1.05, below);
 
     // Upward it keeps going into the deck the pack is already drawing, so there is no lid between the
-    // two and no gap either.
-    float cap = 1.0 - smoothstep(rise * 0.3, rise, -below);
-    float rim = smoothstep(reach, reach * 0.3, radius);
+    // two and no gap either. The fade starts almost at once, or the lowering keeps full weight right up
+    // to the deck and the two read as a disc parked under a ceiling instead of one mass.
+    float cap = 1.0 - smoothstep(rise * 0.05, rise * 1.2, -below);
+    // Ramped the whole way in rather than plateauing: a lowering that holds one density out to a fixed
+    // fraction of its reach has a brim, and a brim on a cloud is a hat.
+    float rim = smoothstep(reach, reach * 0.12, radius);
 
     return body * cap * rim * (0.72 + 0.6 * lumps);
 }
@@ -346,8 +357,22 @@ float vortexdread_density(
                     + vec3(0.0, (p.y * 0.16 - clock * 0.375) * fineness, 0.0);
     float roughness = vortexdread_fbm(sample_pos) - 0.5;
 
-    float edge = wall * (1.0 + 0.62 * roughness * (1.4 - h));
-    float sheath = smoothstep(edge * 1.05, edge * 0.6, radius);
+    // A violent tornado rarely turns as one column. Two to five smaller vortices orbit the axis inside
+    // the parent circulation and turn faster than it does, and that braid is what tells a photograph of
+    // an EF4 from a photograph of an EF1. They live low, where the inflow is fastest and the pressure
+    // drop steepest, and they need a parent wide enough to hold more than one. The core radius is the
+    // absolute measure of that width: the wind field arrives normalised against each storm's own peak,
+    // so a mature EF1 reads the same there as a mature EF5 and would braid just as hard.
+    float violence = smoothstep(14.0, 40.0, f.core_radius);
+    float suction_count = floor(2.0 + 3.0 * violence);
+    float suction_room = smoothstep(0.62, 0.16, h) * violence * smoothstep(0.42, 0.80, f.wind);
+    // Leaning with height, because each one is a vortex in its own right riding the parent's updraught
+    // and trailing behind where it started.
+    float braid = angle * suction_count - clock * 2.3 + (p.y - f.ground_y) * 0.06;
+    float suction = (0.5 + 0.5 * cos(braid)) * suction_room;
+
+    float edge = wall * (1.0 + 0.62 * roughness * (1.4 - h) + 0.34 * suction);
+    float sheath = smoothstep(edge * 1.05, edge * 0.6, radius) * (1.0 + 1.0 * suction);
 
     // Hollow only well up the column. Down where the inflow arrives it is full of what it has picked
     // up, and a funnel drawn as a tube all the way to the ground shows daylight through its middle.
@@ -488,9 +513,15 @@ vec3 vortexdread_draw_one(
             continue;
         }
         float sigma = density * vortexdread_extinction * step_size;
-        float lit = density > vortexdread_lit_threshold
-            ? vortexdread_light_transmittance(f, p, f.height / 48.0, clock)
-            : 1.0;
+        // A second march per sample is the most expensive thing in this loop, and it is paid on every
+        // pixel of a funnel that fills the screen. Past this depth the sample is scaled by so little
+        // transmittance that whatever shading the march would return cannot be told from a constant.
+        float lit = 1.0;
+        if (density > vortexdread_lit_threshold) {
+            lit = transmittance > 0.15
+                ? vortexdread_light_transmittance(f, p, f.height / 48.0, clock)
+                : 0.45;
+        }
 
         // The column is shadowed by itself, which is what gives it its volume. The dust at the foot is
         // not: it sits in open light on every side.
@@ -528,6 +559,31 @@ vec3 vortexdread_draw_one(
  * spends inside it follows from where it crosses the two planes, and a handful of samples across that
  * distance is as good as a hundred through a bounding cylinder the size of the storm.
  */
+/**
+ * Which way the air is feeding this storm, as a bearing.
+ *
+ * <p>Off two fields that do not move with the camera, because anything derived from the axis turns the
+ * shelf with the player: a hard edge that swings round the sky as you walk is worse than no edge.
+ */
+float vortexdread_meso_inflow(VortexdreadFunnel f) {
+    return 6.2831853 * fract(f.height * 0.137 + f.ground_y * 0.0193);
+}
+
+/**
+ * What the rest of the sky does while a storm this size is standing in it.
+ *
+ * <p>The deck below is only the part a ray can cross. Under a real supercell the whole dome goes that
+ * colour for tens of kilometres, and a frame whose middle is black while its edges keep the white of an
+ * ordinary rain sky reads as a prop hung in front of the weather.
+ *
+ * <p>No march, because there is nothing here to resolve: one angle and one distance.
+ */
+vec3 vortexdread_overcast(VortexdreadFunnel f, vec3 dir, vec3 scene_color, float reach) {
+    float near = 1.0 - clamp01(length(f.axis) / max(f.height * 24.0, 1.0));
+    float shade = near * reach * (0.35 + 0.65 * f.ground_load) * f.descent;
+    return mix(scene_color, scene_color * vec3(0.30, 0.34, 0.31), clamp01(shade) * 0.92);
+}
+
 vec3 vortexdread_draw_meso(
     VortexdreadFunnel f,
     vec3 scene_color,
@@ -599,7 +655,13 @@ vec3 vortexdread_draw_meso(
         // A lens rather than a slab: thickest over the updraught and thinning to nothing outward. A
         // layer of even thickness ends on a hard line, because a ray near its edge still crosses the
         // whole of it, and that line is what makes a storm base read as a plate in the sky.
-        float taper = 1.0 - pow(clamp01(radius / rim), 1.6);
+        //
+        // The falloff is not the same on every bearing. Air rises into the base on the inflow side and
+        // the edge there is a wall, the shelf with the hard line under it that every storm chaser
+        // photographs; downwind the same base frays out into nothing over kilometres. One exponent for
+        // the whole circle draws the saucer this file exists to avoid.
+        float inflow = 0.5 + 0.5 * cos(bearing - vortexdread_meso_inflow(f));
+        float taper = 1.0 - pow(clamp01(radius / rim), mix(1.5, 3.6, inflow));
         if (taper <= 0.0) {
             continue;
         }
@@ -610,12 +672,21 @@ vec3 vortexdread_draw_meso(
         float local_top = base + f.height * vortexdread_meso_thick * taper;
         // The underside hangs at a different height everywhere, which is the whole difference between
         // a storm base and a ceiling. Following the same mass that shades it keeps the low places dark.
-        float local_floor = base - f.height * vortexdread_meso_sag * taper * (0.25 + 2.1 * mass);
+        //
+        // Stepped rather than poured: air feeding a base condenses at a few levels rather than at every
+        // height at once, so the underside comes down in shelves with edges on them. Blended back
+        // toward the smooth field, since pure steps give the whole thing a staircase.
+        float shelves = floor(mass * 4.0) / 4.0;
+        float local_floor = base
+            - f.height * vortexdread_meso_sag * taper * (0.25 + 2.1 * mix(mass, shelves, 0.55));
 
         float lid = 1.0 - smoothstep(local_top - f.height * 0.04, local_top, p.y);
         float floor_fade = smoothstep(local_floor, local_floor + f.height * 0.03, p.y);
 
-        float density = lid * floor_fade * taper * (0.12 + 0.42 * grain) * (0.5 + 1.1 * mass)
+        // The mass swings the density wide rather than nudging it. A deck whose optical depth saturates
+        // everywhere comes out as one flat silhouette cut against the sky, and what a storm base has
+        // instead is light and dark across its whole width.
+        float density = lid * floor_fade * taper * (0.12 + 0.42 * grain) * (0.25 + 1.6 * mass)
                       * (0.55 + 0.45 * f.ground_load);
         if (density <= 0.001) {
             continue;
@@ -651,7 +722,22 @@ vec3 vortexdread_draw_funnels(
         if (!vortexdread_read(i, f)) {
             continue;
         }
-        // The mass first: it is above and behind the funnel from any ground level camera, and the
+        // The overcast goes first, since everything after it is standing in front of it. How much of a
+        // pixel the storm owns is measured two ways, and the pack says which by handing a distance of
+        // a million on sky and the render distance on anything solid.
+        //
+        // On sky it is an angle, starting below the horizon line because a storm this size has already
+        // taken the sky behind the hills. Only the last few degrees keep their light, and that thin
+        // bright band under the base is what gives the dark mass its size.
+        //
+        // On solid ground it is a distance. What the pack fades far terrain toward is the colour of the
+        // sky it computed, which is the sky this storm is meant to have taken: leave that alone and a
+        // bright strip runs along the horizon underneath a ceiling that is already black.
+        float reach = max_dist > 1.0e5
+            ? smoothstep(-0.16, 0.30, dir.y)
+            : 0.85 * smoothstep(30.0, 260.0, max_dist);
+        scene_color = vortexdread_overcast(f, dir, scene_color, reach);
+        // The mass next: it is above and behind the funnel from any ground level camera, and the
         // column is what has to end up in front.
         scene_color = vortexdread_draw_meso(f, scene_color, dir, max_dist, ambient_color, dither);
         scene_color =

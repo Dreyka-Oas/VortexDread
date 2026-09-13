@@ -95,10 +95,15 @@ public final class FunnelState {
             return;
         }
 
-        int row = 0;
+        // The nearest ones rather than the first ones the level happens to hand over. Sixteen storms can
+        // be running at once and only four fit, so an arbitrary four means the one filling the screen
+        // can be the one left out, which looks exactly like the funnel failing to draw.
+        TornadoEntity[] nearest = new TornadoEntity[MAX_FUNNELS];
+        double[] distances = new double[MAX_FUNNELS];
+        int found = 0;
         if (client.level != null) {
             for (var entity : client.level.entitiesForRendering()) {
-                if (!(entity instanceof TornadoEntity tornado) || row >= MAX_FUNNELS) {
+                if (!(entity instanceof TornadoEntity tornado)) {
                     continue;
                 }
                 double dx = tornado.getX() - camera.x;
@@ -106,8 +111,15 @@ public final class FunnelState {
                 if (Math.abs(dx) > REACH || Math.abs(dz) > REACH) {
                     continue;
                 }
-                describe(pixels, row++, tornado, dx, dz);
+                found = insert(nearest, distances, found, tornado, dx * dx + dz * dz);
             }
+        }
+
+        int row = 0;
+        while (row < found) {
+            TornadoEntity tornado = nearest[row];
+            describe(pixels, row, tornado, tornado.getX() - camera.x, tornado.getZ() - camera.z);
+            row++;
         }
         for (int empty = row; empty < MAX_FUNNELS; empty++) {
             for (int field = 0; field < SETTINGS_FIELD; field++) {
@@ -134,6 +146,31 @@ public final class FunnelState {
         // Says the row holds a funnel at all, so the pack can stop reading rather than marching four
         // volumes of nothing on every pixel of the screen.
         pixels.setPixel(5, row, rgba(255, 0, 0, 255));
+    }
+
+    /**
+     * Keeps a short list sorted by distance, in place.
+     *
+     * <p>An insertion rather than a sort, because the list is four long and this runs every frame: a
+     * comparator here costs a lambda and a boxed Double per storm per frame, for an ordering four
+     * comparisons settle.
+     *
+     * @return how many entries the list holds afterwards
+     */
+    static int insert(TornadoEntity[] nearest, double[] distances, int found,
+            TornadoEntity tornado, double distance) {
+        if (found == MAX_FUNNELS && distance >= distances[MAX_FUNNELS - 1]) {
+            return found;
+        }
+        int at = Math.min(found, MAX_FUNNELS - 1);
+        while (at > 0 && distances[at - 1] > distance) {
+            nearest[at] = nearest[at - 1];
+            distances[at] = distances[at - 1];
+            at--;
+        }
+        nearest[at] = tornado;
+        distances[at] = distance;
+        return Math.min(found + 1, MAX_FUNNELS);
     }
 
     /** What the player asked the funnel to cost, for whichever program ends up drawing it. */
