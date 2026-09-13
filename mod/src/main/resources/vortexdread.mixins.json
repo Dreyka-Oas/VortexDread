@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "oas.dreyka.vortexdread.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "client.GameRendererAccess",
+    "client.CameraShakeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

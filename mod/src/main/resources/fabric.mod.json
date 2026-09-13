@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "vortexdread",
+  "version": "1.0.0",
+  "name": "Vortex Dread",
+  "description": "A thunderstorm here organises into a supercell, turns the sky over and lowers a funnel out of the cloud base. It rates itself EF0 to EF5 from the wind it carries, tears the ground apart at whatever that wind is worth, and takes what it tears with it. Lightning lights the cloud from the inside.",
+  "authors": [
+    "Dreyka Oas"
+  ],
+  "license": "MIT",
+  "contact": {
+    "issues": "https://github.com/Dreyka-Oas/VortexDread/issues"
+  },
+  "icon": "assets/vortexdread/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "oas.dreyka.vortexdread.VortexDreadMod"
+    ],
+    "client": [
+      "oas.dreyka.vortexdread.client.VortexDreadClient"
+    ]
+  },
+  "mixins": [
+    "vortexdread.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "java": ">=21"
+  },
+  "suggests": {
+    "iris": "*",
+    "sodium": "*",
+    "lithium": "*",
+    "ferritecore": "*",
+    "spark": "*"
+  }
+}

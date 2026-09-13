@@ -1,0 +1,73 @@
+# ---- Gradle / Loom ----
+.gradle/
+build/
+run/
+.kotlin/
+gradle-app.setting
+.gradletasknamecache
+# gradle/wrapper/gradle-wrapper.jar is tracked on purpose: it is what runs ./gradlew
+
+# ---- Compiler output outside build/ ----
+*.class
+bin/
+out/
+
+# ---- IDE ----
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# ---- Logs and JVM crash dumps ----
+*.log
+*.hprof
+core.[0-9]*
+.attach_pid*
+/mod/logs/
+rc.txt
+rs.txt
+
+# ---- Secrets ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Editor, merge and patch leftovers ----
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+
+# ---- Local tooling, never pushed ----
+.skills/
+.claude/
+.codex/
+opencode.json
+.wrangler/
+/.worktrees/
+
+# ---- OS junk ----
+.DS_Store
+Thumbs.db
+
+# ---- The site lives in its own private repository ----
+/web/
+
+# ---- Working notes, never published ----
+PLAN.md
+DEFAUTS-CONNUS.md
+docs/superpowers/
+
+# ---- The author's own instruments, never published ----
+# The repository carries what a player and an addon author need, and nothing else. The cost is that
+# ./gradlew check runs empty for anyone who clones, and that is accepted rather than repaired.
+store/
+mod/scripts/
+mod/src/test/
+mod/src/gametest/
+mod/src/dev/
