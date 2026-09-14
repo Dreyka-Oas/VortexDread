@@ -581,7 +581,27 @@ float vortexdread_meso_inflow(VortexdreadFunnel f) {
 vec3 vortexdread_overcast(VortexdreadFunnel f, vec3 dir, vec3 scene_color, float reach) {
     float near = 1.0 - clamp01(length(f.axis) / max(f.height * 24.0, 1.0));
     float shade = near * reach * (0.35 + 0.65 * f.ground_load) * f.descent;
-    return mix(scene_color, scene_color * vec3(0.30, 0.34, 0.31), clamp01(shade) * 0.92);
+    return mix(scene_color, scene_color * vec3(0.34, 0.37, 0.42), clamp01(shade) * 0.72);
+}
+
+/**
+ * What the same storm does to the ground under it.
+ *
+ * <p>Not darkness. The pack measures the frame and opens its exposure to match, so light taken out of
+ * the whole picture is handed back a frame later and what survives is the swing between the two: the
+ * same scene comes out near black on one capture and washed white on the next.
+ *
+ * <p>What a storm actually does to a field holds up under any exposure, because it is not a level. The
+ * light arriving there has bounced through a hundred cubic kilometres of cloud and comes down grey from
+ * every direction at once, so the greens go grey-blue, the shadows fill in, and nothing in the frame is
+ * saturated any more. Drained at the luminance it arrived with, and the eye reads it as a storm.
+ */
+vec3 vortexdread_pall(VortexdreadFunnel f, vec3 scene_color) {
+    float near = 1.0 - clamp01(length(f.axis) / max(f.height * 24.0, 1.0));
+    float weight = near * (0.35 + 0.65 * f.ground_load) * f.descent;
+    float luma = dot(scene_color, vec3(0.299, 0.587, 0.114));
+    vec3 drained = mix(vec3(luma), scene_color, 0.32) * vec3(0.90, 0.96, 1.12);
+    return mix(scene_color, drained, clamp01(weight) * 0.70);
 }
 
 vec3 vortexdread_draw_meso(
@@ -613,10 +633,14 @@ vec3 vortexdread_draw_meso(
     float clock = frameTimeCounter * 2.0;
     float step_size = (t1 - t0) / float(vortexdread_meso_steps);
 
+    // Hoisted: the mass turns as one piece, so its rotation has nothing to do with where a sample is.
+    float turn = clock * 0.05;
+    mat2 deck_spin = mat2(cos(turn), -sin(turn), sin(turn), cos(turn));
+
     // The underside of a storm base, which is what a ground observer sees of it, sits in its own
     // shadow. It is the ceiling the whole scene is lit under, never a bright thing in the frame.
     vec3 under = mix(vec3(dot(f.tint, vec3(0.299, 0.587, 0.114))), f.tint, 0.2)
-               * (ambient_color * 0.22);
+               * (ambient_color * 0.34);
     vec3 lit_from_within = vec3(1.0, 0.95, 0.8) * (ambient_color * 4.0 + 0.15);
 
     vec3 scattered = vec3(0.0);
@@ -634,15 +658,12 @@ vec3 vortexdread_draw_meso(
             continue;
         }
 
-        // Banded rather than even: the mass turns, and what turns with it winds out from the middle,
-        // which is the one thing that reads as rotation in a still frame.
         float bearing = atan(offset.y, offset.x);
-        // Slow on purpose. Winding the sample ring faster than about one turn across the whole deck
-        // puts the noise's own level sets inside a pixel or two of each other, and a field that fine
-        // stops reading as cloud and starts reading as interference across the sky.
-        float spin = bearing + clock * 0.05 - radius * (0.9 / reach);
-        vec3 sample_pos = vec3(cos(spin), sin(spin), (p.y - base) * (6.0 / f.height))
-                        * (radius * (1.4 / reach) + 1.0);
+        // The whole field is turned rigidly rather than each sample being placed on a ring whose radius
+        // sets its phase. Both read as rotation; only the second one draws its own level sets as rings
+        // centred on the storm, and once the deck is light enough for its shading to show at all, those
+        // rings are the first thing anyone sees.
+        vec3 sample_pos = vec3(deck_spin * offset * (2.2 / reach), (p.y - base) * (6.0 / f.height));
         float grain = vortexdread_fbm(sample_pos);
 
         // The rim is torn on a bearing rather than on the fine grain, because what a circle of the
@@ -698,10 +719,17 @@ vec3 vortexdread_draw_meso(
         // the bright part of it.
         float lit = exp(-(local_top - p.y) * 0.075);
 
+        // The same two fields that built the shape also shade it. A deck this deep saturates its own
+        // optical depth within the first samples, so everything the geometry does below that is thrown
+        // away and what comes back is one flat silhouette: the light and dark of a storm base has to be
+        // put on the colour directly. Where the underside hangs lowest there is most cloud overhead,
+        // which is why the low places are the black ones.
+        float relief = (0.42 + 0.58 * (1.0 - mass)) * (0.75 + 0.5 * grain);
+
         float sigma = density * vortexdread_extinction * step_size;
         float absorbed = 1.0 - exp(-sigma);
         vec3 flashed = mix(under, lit_from_within, vortexdread_bolt_gain(p, f.flash) * 0.8);
-        scattered += flashed * (0.25 + 0.75 * lit) * absorbed * transmittance;
+        scattered += flashed * (0.25 + 0.75 * lit) * relief * absorbed * transmittance;
         transmittance *= exp(-sigma);
     }
 
@@ -717,6 +745,7 @@ vec3 vortexdread_draw_funnels(
     vec3 ambient_color,
     float dither
 ) {
+    bool touched = false;
     for (int i = 0; i < vortexdread_max_funnels; ++i) {
         VortexdreadFunnel f;
         if (!vortexdread_read(i, f)) {
@@ -730,20 +759,28 @@ vec3 vortexdread_draw_funnels(
         // taken the sky behind the hills. Only the last few degrees keep their light, and that thin
         // bright band under the base is what gives the dark mass its size.
         //
-        // On solid ground it is a distance. What the pack fades far terrain toward is the colour of the
-        // sky it computed, which is the sky this storm is meant to have taken: leave that alone and a
-        // bright strip runs along the horizon underneath a ceiling that is already black.
-        float reach = max_dist > 1.0e5
-            ? smoothstep(-0.16, 0.30, dir.y)
-            : 0.85 * smoothstep(30.0, 260.0, max_dist);
-        scene_color = vortexdread_overcast(f, dir, scene_color, reach);
+        // Solid ground is the other function's business, because taking light out of it is the one
+        // thing that does not survive the pack's own exposure.
+        if (max_dist > 1.0e5) {
+            scene_color =
+                vortexdread_overcast(f, dir, scene_color, smoothstep(-0.06, 0.16, dir.y));
+        } else {
+            scene_color = vortexdread_pall(f, scene_color);
+        }
         // The mass next: it is above and behind the funnel from any ground level camera, and the
         // column is what has to end up in front.
         scene_color = vortexdread_draw_meso(f, scene_color, dir, max_dist, ambient_color, dither);
         scene_color =
             vortexdread_draw_one(f, scene_color, dir, max_dist, light_color, ambient_color, dither);
+        touched = true;
     }
-    return scene_color;
+
+    // A quantum of jitter on the way out, and only where something was drawn. Everything above
+    // deliberately flattens the picture, and a flat picture is where the levels the frame is eventually
+    // written to stop hiding: the steps between them land on the iso-luminance lines of the fog and
+    // come out as contours drawn across the whole landscape. Half a level of noise puts them back under
+    // the grain, which is what a dither is for.
+    return touched ? scene_color * (1.0 + (dither - 0.5) * 0.016) : scene_color;
 }
 
 #endif // INCLUDE_VORTEXDREAD_FUNNEL

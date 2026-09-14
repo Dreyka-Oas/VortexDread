@@ -195,8 +195,8 @@ float ringDensity(vec3 p, float roughness) {
 // under the deck as a fraction of the funnel's height, and how far it climbs back above that deck as a
 // fraction of its own depth. All three are matched in TornadoRenderer, which sizes the prism to hold
 // them. The climb is what lets the mass thin out at the top instead of ending on the box's lid.
-const float WALL_REACH = 2.3;
-const float WALL_HANG = 0.13;
+const float WALL_REACH = 1.9;
+const float WALL_HANG = 0.24;
 const float WALL_RISE = 1.4;
 
 /**
@@ -223,6 +223,10 @@ float wallCloudDensity(vec3 p) {
     float turn = GameTime * 2400.0 * 0.09;
     vec2 spun = mat2(cos(turn), -sin(turn), sin(turn), cos(turn)) * offset;
     float lumps = fbm(vec3(spun, p.y * 1.4) * (1.6 / max(coreRadius, 1.0))) - 0.5;
+    // A second grain, four times finer. One octave at the scale of the whole lowering only bends its
+    // outline, and the underside stays a surface: what it has instead is a stack of ragged shelves,
+    // and those live at a fraction of the size of the thing they hang off.
+    float shred = fbm(vec3(spun, p.y * 2.8) * (6.4 / max(coreRadius, 1.0))) - 0.5;
 
     // The edge is torn rather than drawn: a lowering that ends on a circle reads as a saucer parked
     // over the field, and no photograph of one has that shape.
@@ -233,7 +237,8 @@ float wallCloudDensity(vec3 p) {
 
     // Lowest against the funnel and rising outward: a base being drawn down, not a disc parked under
     // the cloud.
-    float lip = hang * (1.0 - 0.55 * smoothstep(0.0, 1.0, radius / reach)) * (1.0 + 1.3 * lumps);
+    float lip = hang * (1.0 - 0.55 * smoothstep(0.0, 1.0, radius / reach))
+              * (1.0 + 1.3 * lumps + 0.9 * shred);
     float body = 1.0 - smoothstep(lip * 0.35, lip, below);
 
     // Nothing ends on a flat lid. Above the nominal deck the mass thins out over its own depth, which
