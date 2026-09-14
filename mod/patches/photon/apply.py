@@ -178,12 +178,15 @@ EDITS = (
         ),
         # The state the funnels travel in. Iris resolves a namespaced location through the game's own
         # texture manager, so what is named here is a texture the mod registers and rewrites every
-        # frame rather than a file in the pack.
+        # frame rather than a file in the pack. Its own sampler rather than a borrowed colortex: the
+        # pack keeps its combined depth buffer in the last one, so overriding that would cost the far
+        # horizon to anyone running Distant Horizons or Voxy, and the pack declares that sampler itself
+        # when either is loaded, which a second declaration of the same name refuses to compile beside.
         (
             "shaders/shaders.properties",
             "# minecraft clouds texture",
             "# Vortex Dread: one row per funnel, written by the mod\n"
-            "texture.composite.colortex15 = vortexdread:textures/effect/funnel_state.png\n\n"
+            "customTexture.vortexdread_state = vortexdread:textures/effect/funnel_state.png\n\n"
             "# minecraft clouds texture",
             1,
         ),
@@ -203,6 +206,7 @@ EDITS = (
 )
 
 COPIES = [
+    ("shaders/include/vortexdread/state.glsl", "shaders/include/vortexdread/state.glsl"),
     ("shaders/include/vortexdread/lightning.glsl", "shaders/include/vortexdread/lightning.glsl"),
     ("shaders/include/vortexdread/funnel.glsl", "shaders/include/vortexdread/funnel.glsl"),
     ("shaders/include/vortexdread/exposure.glsl", "shaders/include/vortexdread/exposure.glsl"),

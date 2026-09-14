@@ -15,11 +15,7 @@
   nothing at all.
 */
 
-// The state rides in on a sampler this pass has no other use for, because a pack asks for a custom
-// texture by sampler name and there is no name of its own to ask under. Which one is chosen is settled
-// in shaders.properties, and the two have to agree.
-uniform sampler2D colortex15;
-#define vortexdread_state colortex15
+#include "/include/vortexdread/state.glsl"
 
 // Where the bolt is. Iris hands it over camera relative, with the fourth component set only while one
 // is actually being drawn, and the header guards itself against the passes that already have it.

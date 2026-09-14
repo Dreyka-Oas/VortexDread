@@ -10,10 +10,13 @@
   The aperture is the only place a storm can take light away and have it stay away.
 
   Read from the same texture the funnel march reads, but only the three fields that matter here, and
-  in the vertex stage, where the pack works out its exposure once per frame rather than once per pixel.
+  applied where the pack spends its exposure rather than where it works it out. The pack stores the
+  value it computed back into the frame the next one reads, so a factor applied at the source is fed
+  its own output and compounds: the loop settles on something that has nothing to do with the number
+  asked for, and for anything above one it never settles at all.
 */
 
-uniform sampler2D colortex15;
+#include "/include/vortexdread/state.glsl"
 
 // The pack's own flash factor, which is what a bolt does to the whole sky here.
 #include "/include/misc/lightning_flash.glsl"
@@ -35,20 +38,11 @@ const float vortexdread_exposure_reach = 2048.0;
 const float vortexdread_pall_full = 700.0;
 const float vortexdread_pall_gone = 2000.0;
 
-// Where the aperture is put while a storm of the mod's own is overhead, against where the pack put it.
-//
-// Measured rather than chosen. At noon this pack renders a clear sky at a mean of 192 out of 255 and
-// the same sky under vanilla thunder at 41, which is a drop of more than two stops before the mod has
-// touched anything: the whole frame lands in the bottom sixth of the range and every colour in it is
-// gone. Nobody standing under a storm at midday sees that. What they see is dim, flat and grey, with
-// the colours still in it, which is about half of a clear noon. This number is what puts the frame
-// back there, and the pall below is then measured from somewhere an eye would recognise.
-const float vortexdread_storm_open = 2.3;
-
-// The most of the light a storm directly overhead is allowed to take, once the aperture is back where
-// the line above puts it. A summer afternoon under a supercell reads like an hour before dusk, and the
-// pack's own tone curve does the rest.
-const float vortexdread_pall_depth = 0.18;
+// The most of the light a storm directly overhead is allowed to take. Small on purpose: the pack's own
+// metering already reads the deck and stops down for it, and this is only what that metering gives back
+// a second later, which is the sense that the light went out of the afternoon. A summer noon under a
+// supercell reads like an hour before dusk, and the pack's tone curve does the rest.
+const float vortexdread_pall_depth = 0.22;
 
 // What a storm that has not dropped anything yet already takes. A mesocyclone is overhead long before
 // a funnel is, and the deck is what blocks the sun, not the column under it.
@@ -63,13 +57,13 @@ float vortexdread_exposure_scale() {
     float worst = 0.0;
 
     for (int i = 0; i < vortexdread_exposure_rows; ++i) {
-        if (texelFetch(colortex15, ivec2(5, i), 0).x < 0.5) {
+        if (texelFetch(vortexdread_state, ivec2(5, i), 0).x < 0.5) {
             continue;
         }
 
-        vec4 place = texelFetch(colortex15, ivec2(0, i), 0);
-        vec4 reach = texelFetch(colortex15, ivec2(2, i), 0);
-        vec4 colour = texelFetch(colortex15, ivec2(3, i), 0);
+        vec4 place = texelFetch(vortexdread_state, ivec2(0, i), 0);
+        vec4 reach = texelFetch(vortexdread_state, ivec2(2, i), 0);
+        vec4 colour = texelFetch(vortexdread_state, ivec2(3, i), 0);
 
         vec2 axis = vec2(
             vortexdread_exposure_unpack(place.x, place.y) * 2.0 * vortexdread_exposure_reach
@@ -93,12 +87,8 @@ float vortexdread_exposure_scale() {
     float near_storm = clamp(worst, 0.0, 1.0);
     float flash = clamp(LIGHTNING_FLASH_UNIFORM, 0.0, 1.0) * near_storm;
 
-    // Opened first, then stopped down: the pall is a fraction of a daylight an eye would recognise, and
-    // taking it off the pack's own crushed value instead would be measuring darkness from darkness.
-    float open = mix(1.0, vortexdread_storm_open, near_storm);
-
-    return open * (1.0 - vortexdread_pall_depth * near_storm)
-               * (1.0 - vortexdread_flash_stop * flash);
+    return (1.0 - vortexdread_pall_depth * near_storm)
+         * (1.0 - vortexdread_flash_stop * flash);
 }
 
 #endif
