@@ -27,7 +27,7 @@
 // they see is the mass lighting up from inside, and stopping down for the length of the flash is what
 // puts that back. Only while a storm of the mod's own is near, so an ordinary night keeps the pack's
 // behaviour.
-const float vortexdread_flash_stop = 0.66;
+const float vortexdread_flash_stop = 0.88;
 
 const int vortexdread_exposure_rows = 4;
 const float vortexdread_exposure_reach = 2048.0;
