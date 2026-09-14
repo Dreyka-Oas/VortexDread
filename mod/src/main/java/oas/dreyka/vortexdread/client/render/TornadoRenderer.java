@@ -42,11 +42,17 @@ public class TornadoRenderer extends EntityRenderer<TornadoEntity, TornadoRender
     /** How far under the funnel's own ground the dust runs, as a multiple of the core radius. */
     private static final float GROUND_RING_DROP = 0.9f;
 
-    /** How far the lowered cloud base spreads round the top of the column. Set in the program. */
-    private static final float WALL_CLOUD_REACH = 2.3f * 1.8f;
+    /**
+     * How far the lowered cloud base spreads round the top of the column. Set in the program.
+     *
+     * <p>Its own reach with the slack the torn edge pushes into, plus the offset that puts the lowering
+     * off the column's flank, plus the lean that carries the top of the column away from its foot. A
+     * prism sized on the reach alone cuts the far side of the deck off in mid air.
+     */
+    private static final float WALL_CLOUD_REACH = 5.2f * 1.5f + 1.7f + 1.8f;
 
     /** How far over the cloud base the prism reaches so that lowering has room to thin out. */
-    private static final float WALL_CLOUD_LOFT = 0.19f;
+    private static final float WALL_CLOUD_LOFT = 0.05f;
 
     public TornadoRenderer(EntityRendererProvider.Context context) {
         super(context);

@@ -53,9 +53,22 @@ const float vortexdread_ring_reach = 1.25;
 const float vortexdread_ring_swell = 0.9;
 const float vortexdread_ring_rough = 1.3;
 const float vortexdread_ring_drop = 0.9;
-const float vortexdread_wall_reach = 1.9;
-const float vortexdread_wall_hang = 0.24;
-const float vortexdread_wall_rise = 1.4;
+// A lowering is kilometres across where the column under it is hundreds of metres, and drawing the two
+// at the same width is what puts a cap on the funnel instead of a deck over it.
+const float vortexdread_wall_reach = 5.2;
+
+// How far off the column the lowering sits, in core radii. A funnel comes down from a corner of the
+// block of cloud, never from the middle of it, and that offset is most of what tells the two apart.
+const float vortexdread_wall_offset = 1.7;
+
+// How far the top of the column stands off the plumb line through its foot, in core radii. The air the
+// funnel sits in moves at one speed near the ground and another a kilometre up, so the column is carried
+// over as it climbs. Drawn vertical it reads as a cone pasted on a photograph, whatever else is right.
+const float vortexdread_lean = 1.8;
+// A lowering is a slab, wide and shallow. Given as much depth as width it draws a ball sitting on the
+// column, and the pack's own deck above it is what continues it upward, so it needs almost no rise.
+const float vortexdread_wall_hang = 0.14;
+const float vortexdread_wall_rise = 0.35;
 
 // The mass overhead, both measured in funnel heights, and how many samples it is worth. Few,
 // because it is a slab: what a ray does inside one is the distance it crosses.
@@ -266,6 +279,39 @@ float vortexdread_ring_density(VortexdreadFunnel f, vec3 p, float roughness, flo
  * with it, several times wider than the funnel and lowest right against it, and the funnel is that
  * block continuing downward rather than a separate object underneath it.
  */
+/**
+ * Which way the air is feeding this storm, as a bearing.
+ *
+ * <p>Off two fields that do not move with the camera, because anything derived from the axis turns the
+ * shelf with the player: a hard edge that swings round the sky as you walk is worse than no edge.
+ */
+float vortexdread_meso_inflow(VortexdreadFunnel f) {
+    return 6.2831853 * fract(f.height * 0.137 + f.ground_y * 0.0193);
+}
+
+/**
+ * Where the centre of the column stands at a given height.
+ *
+ * <p>Held at the foot and carried over as it climbs, which is what the shear above a storm does to it.
+ * The curve is slow off the ground, where the surface still has hold of the circulation, and opens up
+ * through the middle of the height.
+ */
+vec2 vortexdread_axis_at(VortexdreadFunnel f, float y) {
+    float h = clamp01((y - f.ground_y) / f.height);
+    // Across the inflow rather than along it: the shear that tips the column is the same shear that
+    // gave the storm its rotation, and it runs across the flank the air arrives on.
+    float bearing = vortexdread_meso_inflow(f) + 2.4;
+
+    float lean = f.core_radius * vortexdread_lean * h * h * (1.5 - 0.5 * h);
+    // A slow wander across that lean, because a column carried by a wind that is not steady does not
+    // arrive in a plane. Faded in off the ground so the foot stays where the debris ring is.
+    float sway = f.core_radius * 0.3 * smoothstep(0.0, 0.3, h)
+               * (vortexdread_value_noise(vec3(f.ground_y, h * 3.4, 0.0)) - 0.5);
+
+    return f.axis + vec2(cos(bearing), sin(bearing)) * lean
+                  + vec2(-sin(bearing), cos(bearing)) * sway;
+}
+
 float vortexdread_wall_cloud_density(VortexdreadFunnel f, vec3 p, float clock) {
     float hang = f.height * vortexdread_wall_hang;
     float rise = hang * vortexdread_wall_rise;
@@ -274,7 +320,13 @@ float vortexdread_wall_cloud_density(VortexdreadFunnel f, vec3 p, float clock) {
         return 0.0;
     }
 
-    vec2 offset = p.xz - f.axis;
+    float inflow = vortexdread_meso_inflow(f);
+    // Measured off the block of cloud, not off the column, because the column hangs from a corner of it.
+    // Centring the two is what merges them into one silhouette with a rounded top, and a rounded top on
+    // a funnel is a mushroom.
+    vec2 centre = vortexdread_axis_at(f, f.ground_y + f.height)
+                + vec2(cos(inflow), sin(inflow)) * (f.core_radius * vortexdread_wall_offset);
+    vec2 offset = p.xz - centre;
     float radius = length(offset);
 
     // Its own grain, at the scale of the thing rather than at the scale of the column's striations.
@@ -288,7 +340,7 @@ float vortexdread_wall_cloud_density(VortexdreadFunnel f, vec3 p, float clock) {
 
     // The edge is torn rather than drawn: a lowering that ends on a circle reads as a saucer parked
     // over the field, which is the one shape no photograph of one has.
-    float reach = f.core_radius * vortexdread_wall_reach * (1.0 + 1.6 * lumps);
+    float reach = f.core_radius * vortexdread_wall_reach * (1.0 + 1.0 * lumps);
     if (radius > reach) {
         return 0.0;
     }
@@ -296,17 +348,33 @@ float vortexdread_wall_cloud_density(VortexdreadFunnel f, vec3 p, float clock) {
     // Nearly all of the thickness is gone by the rim, which is what makes the shape a bowl hanging off
     // the base rather than a plate resting under it. A lowering keeps a fraction of its depth out
     // there, and that fraction is the whole difference between a wall cloud and a saucer.
-    float lip = hang * (1.0 - 0.88 * smoothstep(0.0, 1.0, radius / reach))
-              * (1.0 + 1.5 * lumps + 0.9 * shred);
-    float body = 1.0 - smoothstep(lip * 0.08, lip * 1.05, below);
+    // Deeper on one side than the other, and always the same side for a given storm. A lowering sits
+    // over the updraught, the updraught sits on the inflow flank, and the wall hangs lowest where that
+    // air is arriving. A bowl that hangs evenly all the way round is a lampshade.
+    //
+    // It only ever takes depth away. Letting it add depth on the near flank widens the whole lowering
+    // into a cap sitting on the funnel, and a cap is the one silhouette that reads as a mushroom.
+    // Lowest on the side the column is on, since that is the side the updraught is on.
+    float bearing = atan(offset.y, offset.x);
+    float leaning = 0.5 - 0.5 * cos(bearing - inflow);
+
+    // Held flat over the inner third and falling away only past that. A depth that starts shedding at
+    // the centre draws a dome, and the underside of a lowering is a floor with shelves hanging off it.
+    float lip = hang * (1.0 - 0.9 * smoothstep(0.3, 1.0, radius / reach))
+              * (0.68 + 0.32 * leaning)
+              * (1.0 + 1.2 * lumps + 1.1 * shred);
+    // A short fall rather than a long one, because the underside of a lowering is a surface. Faded over
+    // the whole of its own depth it comes out as a soft dome, which is what a smoke plume looks like
+    // and not what a wall cloud looks like: those have shelves with edges you can point at.
+    float body = 1.0 - smoothstep(lip * 0.62, lip * 1.02, below);
 
     // Upward it keeps going into the deck the pack is already drawing, so there is no lid between the
     // two and no gap either. The fade starts almost at once, or the lowering keeps full weight right up
     // to the deck and the two read as a disc parked under a ceiling instead of one mass.
     float cap = 1.0 - smoothstep(rise * 0.05, rise * 1.2, -below);
-    // Ramped the whole way in rather than plateauing: a lowering that holds one density out to a fixed
-    // fraction of its reach has a brim, and a brim on a cloud is a hat.
-    float rim = smoothstep(reach, reach * 0.12, radius);
+    // Full weight over most of the width and thinning only near the torn edge, which is what makes this
+    // read as a piece of the deck coming down rather than as an object hung under it.
+    float rim = smoothstep(reach, reach * 0.85, radius);
 
     return body * cap * rim * (0.72 + 0.6 * lumps);
 }
@@ -327,14 +395,15 @@ float vortexdread_density(
     dust_share = 0.0;
     lowering_share = 0.0;
     float h = clamp01((p.y - f.ground_y) / f.height);
-    float radius = length(p.xz - f.axis);
+    vec2 axis = vortexdread_axis_at(f, p.y);
+    float radius = length(p.xz - axis);
 
     float wall = vortexdread_wall_radius(f, h);
     float lifted = (p.y - f.ground_y) < f.core_radius * 5.0
         ? vortexdread_ring_radius(f) * vortexdread_ring_rough
         : 0.0;
     float lowered = (p.y - f.ground_y) > f.height * (1.0 - vortexdread_wall_hang)
-        ? f.core_radius * vortexdread_wall_reach * 1.8
+        ? f.core_radius * (vortexdread_wall_reach * 1.5 + vortexdread_wall_offset)
         : 0.0;
     float outer = max(max(wall * 1.5, lifted), lowered);
     if (radius > outer) {
@@ -344,12 +413,17 @@ float vortexdread_density(
     // The whole column turns and the noise turns with it, so the striations wind round the funnel
     // rather than crawling across a surface that happens to be rotating underneath them.
     float turn = clock * (0.6 + 0.4 * f.wind) / max(wall, 1.0);
-    float angle = atan(p.z - f.axis.y, p.x - f.axis.x) + turn;
+    float angle = atan(p.z - axis.y, p.x - axis.x) + turn;
     // Air climbing the wall turns many times on the way up, so a mark on the surface traces a helix.
     // Winding the sampling ring with height is that helix, and it keeps the noise continuous where
     // shearing the height by the bearing would leave a seam down one side. Narrow columns turn faster
     // for the same wind, which is why the pitch tightens as the wall closes in.
-    float wound = angle + (p.y - f.ground_y) * (0.16 + 0.5 / max(wall, 2.0));
+    // Wandering rather than constant. A fixed pitch winds the same helix from the ground to the cloud
+    // and the eye reads a machined thread; the real thing is a column being stretched and squeezed as it
+    // goes, so the winding tightens over a few tens of metres and opens out again over the next few.
+    float pitch = (0.16 + 0.5 / max(wall, 2.0))
+                * (0.6 + 0.8 * vortexdread_value_noise(vec3(0.0, (p.y - f.ground_y) * 0.02, f.ground_y)));
+    float wound = angle + (p.y - f.ground_y) * pitch;
     // Frequency against the wisp the player asked for, so the default leaves these numbers where they
     // were tuned and a coarser setting spends its steps on fewer, larger features.
     float fineness = vortexdread_detail_reference / vortexdread_detail();
@@ -409,14 +483,25 @@ float vortexdread_light_transmittance(VortexdreadFunnel f, vec3 p, float step_si
 
 /** Entry and exit of the view ray through the cylinder one funnel lives in. */
 bool vortexdread_bounds(VortexdreadFunnel f, vec3 dir, out float t0, out float t1) {
-    float max_radius = max(
+    // Centred between the column and the lowering rather than on the column, so the cylinder covering
+    // both stays as small as it can. Every block of extra reach here is a march step spent on empty air.
+    float inflow = vortexdread_meso_inflow(f);
+    vec2 top_axis = vortexdread_axis_at(f, f.ground_y + f.height);
+    vec2 hub = mix(f.axis, top_axis + vec2(cos(inflow), sin(inflow))
+                                      * (f.core_radius * vortexdread_wall_offset), 0.5);
+    // Everything the cylinder has to hold is measured from that midpoint: the foot, and the lowering at
+    // the far end of both the lean and its own offset.
+    float spread = 0.5 * length(top_axis - f.axis
+                                + vec2(cos(inflow), sin(inflow))
+                                  * (f.core_radius * vortexdread_wall_offset));
+    float max_radius = spread + max(
         max(vortexdread_wall_radius(f, 1.0) * 1.5, vortexdread_ring_radius(f) * vortexdread_ring_rough),
-        f.core_radius * vortexdread_wall_reach
+        f.core_radius * vortexdread_wall_reach * 1.5
     );
     float floor_y = f.ground_y - f.core_radius * vortexdread_ring_drop;
     float top = f.ground_y + f.height * (1.0 + vortexdread_wall_hang * vortexdread_wall_rise);
 
-    vec2 oc = -f.axis;
+    vec2 oc = -hub;
     float a = dot(dir.xz, dir.xz);
     float b = 2.0 * dot(oc, dir.xz);
     float c = dot(oc, oc) - max_radius * max_radius;
@@ -478,7 +563,14 @@ vec3 vortexdread_draw_one(
     }
 
     float clock = frameTimeCounter * 2.0;
-    int steps = vortexdread_march_steps();
+
+    // The lowering reaches several times further than the column, and a fixed count spread over that
+    // whole bound steps clean over the condensation sheath, which is a shell a fraction of a core radius
+    // thick: the column then comes out as a wire hanging off a cloud. The sheath is the one sample the
+    // march cannot miss, so the count is read off its thickness, with the player's setting as the floor.
+    int base_steps = vortexdread_march_steps();
+    int steps = clamp(
+        int((t1 - t0) / max(f.core_radius * 0.12, 1.0)), base_steps, base_steps * 3);
     float step_size = (t1 - t0) / float(steps);
 
     // Condensation is water, and water is white. What colours a funnel is the ground in it, and even a
@@ -540,33 +632,29 @@ vec3 vortexdread_draw_one(
         // has: the bottom is buried in its own rain and its own dust, the top is still in the open.
         float height = mix(0.3 + 0.5 * h, 0.5, dust_share);
 
+        // One side brighter than the other, which is the thing a column drawn by a light march alone
+        // never gets. The march looks for the sun, and under a storm base there is no sun to find: what
+        // actually lights a wedge is the strip of open sky between the base and the horizon, and that
+        // strip arrives sideways. So the wall facing the bright quarter is the lit one and the wall
+        // facing away is the silhouette, which is why a photographed funnel reads as round.
+        //
+        // The column is a surface of revolution, so what a sample is facing is the direction out from
+        // the axis. Faded out when the light is overhead, since there is no bright quarter then and the
+        // term would only draw a seam down whichever way the numbers happened to round.
+        vec2 facing = p.xz - vortexdread_axis_at(f, p.y);
+        vec2 from_light = light_dir.xz;
+        float sideways = length(from_light);
+        float turned = sideways > 1.0e-3 && length(facing) > 1.0e-3
+            ? 0.5 + 0.5 * dot(facing / length(facing), from_light / sideways)
+            : 0.5;
+        float relief = mix(1.0, mix(0.58, 1.34, turned), sideways * (1.0 - dust_share));
+
         float absorbed = 1.0 - exp(-sigma);
-        scattered += material * shade * height * absorbed * transmittance;
+        scattered += material * shade * height * relief * absorbed * transmittance;
         transmittance *= exp(-sigma);
     }
 
     return scene_color * transmittance + scattered;
-}
-
-/**
- * The mesocyclone, as a slab of cloud the funnel hangs from.
- *
- * <p>A funnel ending in clear air is the tell that gives a render away. What it comes out of is a
- * rotating mass several kilometres across, and from underneath that mass is a ceiling: dark, banded,
- * turning, with the lowering and then the funnel underneath it.
- *
- * <p>Marched as a slab rather than as a volume. The shape is flat and wide, so the distance a ray
- * spends inside it follows from where it crosses the two planes, and a handful of samples across that
- * distance is as good as a hundred through a bounding cylinder the size of the storm.
- */
-/**
- * Which way the air is feeding this storm, as a bearing.
- *
- * <p>Off two fields that do not move with the camera, because anything derived from the axis turns the
- * shelf with the player: a hard edge that swings round the sky as you walk is worse than no edge.
- */
-float vortexdread_meso_inflow(VortexdreadFunnel f) {
-    return 6.2831853 * fract(f.height * 0.137 + f.ground_y * 0.0193);
 }
 
 /**
@@ -577,11 +665,16 @@ float vortexdread_meso_inflow(VortexdreadFunnel f) {
  * ordinary rain sky reads as a prop hung in front of the weather.
  *
  * <p>No march, because there is nothing here to resolve: one angle and one distance.
+ *
+ * <p>Only the part of that the aperture cannot do. How dark the whole frame goes is set in the pack's
+ * own exposure pass, where it survives; what is left here is the difference between the sky and the
+ * ground under it, since a storm dome is several stops below the field it stands over and one aperture
+ * cannot hold both.
  */
 vec3 vortexdread_overcast(VortexdreadFunnel f, vec3 dir, vec3 scene_color, float reach) {
     float near = 1.0 - clamp01(length(f.axis) / max(f.height * 24.0, 1.0));
     float shade = near * reach * (0.35 + 0.65 * f.ground_load) * f.descent;
-    return mix(scene_color, scene_color * vec3(0.34, 0.37, 0.42), clamp01(shade) * 0.72);
+    return mix(scene_color, scene_color * vec3(0.52, 0.55, 0.62), clamp01(shade) * 0.68);
 }
 
 /**
@@ -604,6 +697,17 @@ vec3 vortexdread_pall(VortexdreadFunnel f, vec3 scene_color) {
     return mix(scene_color, drained, clamp01(weight) * 0.70);
 }
 
+/**
+ * The mesocyclone, as a slab of cloud the funnel hangs from.
+ *
+ * <p>A funnel ending in clear air is the tell that gives a render away. What it comes out of is a
+ * rotating mass several kilometres across, and from underneath that mass is a ceiling: dark, banded,
+ * turning, with the lowering and then the funnel underneath it.
+ *
+ * <p>Marched as a slab rather than as a volume. The shape is flat and wide, so the distance a ray
+ * spends inside it follows from where it crosses the two planes, and a handful of samples across that
+ * distance is as good as a hundred through a bounding cylinder the size of the storm.
+ */
 vec3 vortexdread_draw_meso(
     VortexdreadFunnel f,
     vec3 scene_color,

@@ -139,6 +139,36 @@ EDITS = (
             "    // Blend fog\n",
             1,
         ),
+        # The aperture. Photon reads the frame it was handed and opens up until the median lands where
+        # it wants it, so a storm that only takes light out of the picture downstream has that light
+        # handed straight back and comes out as an oscillation instead of a mood. Closing the aperture
+        # itself is the one change the pack cannot undo a frame later.
+        (
+            "shaders/program/c4_taa_exposure.vsh",
+            "void main() {\n    uv = gl_MultiTexCoord0.xy;",
+            '#include "/include/vortexdread/exposure.glsl"\n\n'
+            "void main() {\n    uv = gl_MultiTexCoord0.xy;",
+            1,
+        ),
+        (
+            "shaders/program/c4_taa_exposure.vsh",
+            "    exposure = mix(target_exposure, previous_exposure, blend_weight);\n#endif",
+            "    exposure = mix(target_exposure, previous_exposure, blend_weight);\n#endif\n\n"
+            "    // Vortex Dread: what the storm overhead takes out of the whole frame\n"
+            "    exposure *= vortexdread_exposure_scale();",
+            1,
+        ),
+        # The last step of the eight bit ramp, spent on a pattern that moves rather than one that stands
+        # still. The ordered matrix is a fixed weave over the whole screen, invisible on a bright field
+        # and a legible thread once a storm has closed the aperture two stops. Rolling the noise every
+        # frame spends the same one step and leaves the eye nothing to lock onto.
+        (
+            "shaders/program/final.fsh",
+            "    fragment_color = dither_8bit(fragment_color, bayer16(vec2(texel)));",
+            "    fragment_color = dither_8bit(\n"
+            "        fragment_color, interleaved_gradient_noise(vec2(texel), int(frameTimeCounter * 100.0)));",
+            1,
+        ),
         # The state the funnels travel in. Iris resolves a namespaced location through the game's own
         # texture manager, so what is named here is a texture the mod registers and rewrites every
         # frame rather than a file in the pack.
@@ -168,6 +198,7 @@ EDITS = (
 COPIES = [
     ("shaders/include/vortexdread/lightning.glsl", "shaders/include/vortexdread/lightning.glsl"),
     ("shaders/include/vortexdread/funnel.glsl", "shaders/include/vortexdread/funnel.glsl"),
+    ("shaders/include/vortexdread/exposure.glsl", "shaders/include/vortexdread/exposure.glsl"),
 ]
 
 

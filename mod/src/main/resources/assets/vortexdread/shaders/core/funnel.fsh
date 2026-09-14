@@ -195,9 +195,46 @@ float ringDensity(vec3 p, float roughness) {
 // under the deck as a fraction of the funnel's height, and how far it climbs back above that deck as a
 // fraction of its own depth. All three are matched in TornadoRenderer, which sizes the prism to hold
 // them. The climb is what lets the mass thin out at the top instead of ending on the box's lid.
-const float WALL_REACH = 1.9;
-const float WALL_HANG = 0.24;
-const float WALL_RISE = 1.4;
+// A lowering is kilometres across where the column under it is hundreds of metres, and it is a slab
+// rather than a bowl. Drawn at the column's own width and given as much depth as width, the two merge
+// into one silhouette with a rounded top, which is a mushroom and not a storm.
+const float WALL_REACH = 5.2;
+const float WALL_HANG = 0.14;
+const float WALL_RISE = 0.35;
+
+// How far off the column the lowering sits, in core radii. A funnel comes down from a corner of the
+// block of cloud, never from the middle of it, and that offset is most of what tells the two apart.
+const float WALL_OFFSET = 1.7;
+
+// How far the top of the column stands off the plumb line through its foot, in core radii. The air the
+// funnel sits in moves at one speed near the ground and another a kilometre up, so the column is carried
+// over as it climbs. Drawn vertical it reads as a cone pasted on a photograph, whatever else is right.
+const float LEAN = 1.8;
+
+/** Which way the air feeds this storm, off two fields that do not move with the camera. */
+float mesoInflow() {
+    return 6.2831853 * fract(funnelHeight * 0.137 + groundY * 0.0193);
+}
+
+/**
+ * Where the centre of the column stands at a given height.
+ *
+ * <p>Held at the foot and carried over as it climbs, which is what the shear above a storm does to it.
+ * The curve is slow off the ground, where the surface still has hold of the circulation.
+ */
+vec2 axisAt(float y) {
+    float h = clamp((y - groundY) / funnelHeight, 0.0, 1.0);
+    // Across the inflow rather than along it: the shear that tips the column is the same shear that
+    // gave the storm its rotation, and it runs across the flank the air arrives on.
+    float bearing = mesoInflow() + 2.4;
+
+    float lean = coreRadius * LEAN * h * h * (1.5 - 0.5 * h);
+    float sway = coreRadius * 0.3 * smoothstep(0.0, 0.3, h)
+               * (valueNoise(vec3(groundY, h * 3.4, 0.0)) - 0.5);
+
+    return axisXZ + vec2(cos(bearing), sin(bearing)) * lean
+                  + vec2(-sin(bearing), cos(bearing)) * sway;
+}
 
 /**
  * Density of the wall cloud the funnel comes out of.
@@ -215,7 +252,11 @@ float wallCloudDensity(vec3 p) {
         return 0.0;
     }
 
-    vec2 offset = p.xz - axisXZ;
+    float inflow = mesoInflow();
+    // Measured off the block of cloud, not off the column, because the column hangs from a corner of it.
+    vec2 centre = axisAt(groundY + funnelHeight)
+                + vec2(cos(inflow), sin(inflow)) * (coreRadius * WALL_OFFSET);
+    vec2 offset = p.xz - centre;
     float radius = length(offset);
     // Its own grain, at the scale of the thing rather than at the scale of the column's striations,
     // and turning with it. Borrowing the column's noise here gives a disc with fine stripes on it,
@@ -230,23 +271,27 @@ float wallCloudDensity(vec3 p) {
 
     // The edge is torn rather than drawn: a lowering that ends on a circle reads as a saucer parked
     // over the field, and no photograph of one has that shape.
-    float reach = coreRadius * WALL_REACH * (1.0 + 1.6 * lumps);
+    float reach = coreRadius * WALL_REACH * (1.0 + 1.0 * lumps);
     if (radius > reach) {
         return 0.0;
     }
 
-    // Lowest against the funnel and rising outward: a base being drawn down, not a disc parked under
-    // the cloud.
-    float lip = hang * (1.0 - 0.55 * smoothstep(0.0, 1.0, radius / reach))
-              * (1.0 + 1.3 * lumps + 0.9 * shred);
-    float body = 1.0 - smoothstep(lip * 0.35, lip, below);
+    // Lowest on the side the column is on, since that is the side the updraught is on, and held flat
+    // over the inner third. A depth that starts shedding at the centre draws a dome, and the underside
+    // of a lowering is a floor with shelves hanging off it.
+    float bearing = atan(offset.y, offset.x);
+    float leaning = 0.5 - 0.5 * cos(bearing - inflow);
+    float lip = hang * (1.0 - 0.9 * smoothstep(0.3, 1.0, radius / reach))
+              * (0.68 + 0.32 * leaning)
+              * (1.0 + 1.2 * lumps + 1.1 * shred);
+    float body = 1.0 - smoothstep(lip * 0.62, lip * 1.02, below);
 
     // Nothing ends on a flat lid. Above the nominal deck the mass thins out over its own depth, which
     // is where the pack's clouds or the game's take the picture over.
     float cap = 1.0 - smoothstep(rise * 0.05, rise * 1.2, -below);
-    // Ramped the whole way in rather than plateauing: a lowering that holds one density out to a fixed
-    // fraction of its reach has a brim, and a brim on a cloud is a hat.
-    float rim = smoothstep(reach, reach * 0.12, radius);
+    // Full weight over most of the width and thinning only near the torn edge, which is what makes this
+    // read as a piece of the deck coming down rather than as an object hung under it.
+    float rim = smoothstep(reach, reach * 0.85, radius);
 
     // It is already turning before anything comes out of it, and it stays after the funnel has roped
     // out, so it does not follow the descent the way the condensation does.
@@ -264,14 +309,15 @@ float wallCloudDensity(vec3 p) {
 float funnelDensity(vec3 p, out float dustShare) {
     dustShare = 0.0;
     float h = clamp((p.y - groundY) / funnelHeight, 0.0, 1.0);
-    float radius = length(p.xz - axisXZ);
+    vec2 axis = axisAt(p.y);
+    float radius = length(p.xz - axis);
 
     // Most steps on most rays land in clear air. Answering those before the noise is sampled is what
     // keeps a funnel that fills the screen inside a frame budget.
     float wall = wallRadius(h);
     float lifted = (p.y - groundY) < coreRadius * 5.0 ? ringRadius() * RING_ROUGH : 0.0;
     float lowered = (p.y - groundY) > funnelHeight * (1.0 - WALL_HANG)
-        ? coreRadius * WALL_REACH * 1.8
+        ? coreRadius * (WALL_REACH * 1.5 + WALL_OFFSET)
         : 0.0;
     float outer = max(max(wall * 1.5, lifted), lowered);
     if (radius > outer) {
@@ -281,12 +327,17 @@ float funnelDensity(vec3 p, out float dustShare) {
     // The whole column turns, and the noise turns with it, so the striations wind round the funnel
     // rather than crawling across a surface that happens to be rotating underneath them.
     float turn = GameTime * 2400.0 * (0.6 + 0.4 * windFraction) / max(wall, 1.0);
-    float angle = atan(p.z - axisXZ.y, p.x - axisXZ.x) + turn;
+    float angle = atan(p.z - axis.y, p.x - axis.x) + turn;
     // Air climbing the wall turns many times on the way up, so a mark on the surface traces a helix.
     // Winding the sampling ring with height is that helix, and it keeps the noise continuous where
     // shearing the height by the bearing would leave a seam down one side. Narrow columns turn faster
     // for the same wind, which is why the pitch tightens as the wall closes in.
-    float wound = angle + (p.y - groundY) * (0.16 + 0.5 / max(wall, 2.0));
+    // Wandering rather than constant. A fixed pitch winds the same helix from the ground to the cloud
+    // and the eye reads a machined thread; the real thing is a column being stretched and squeezed as it
+    // goes, so the winding tightens over a few tens of metres and opens out again over the next few.
+    float pitch = (0.16 + 0.5 / max(wall, 2.0))
+                * (0.6 + 0.8 * valueNoise(vec3(0.0, (p.y - groundY) * 0.02, groundY)));
+    float wound = angle + (p.y - groundY) * pitch;
     float fineness = DETAIL_REFERENCE / detailSize();
     vec3 sample = vec3(cos(wound), 0.0, sin(wound)) * (radius * 0.35 * fineness)
                 + vec3(0.0, (p.y * 0.16 - GameTime * 900.0) * fineness, 0.0);
@@ -351,10 +402,16 @@ float lightTransmittance(vec3 p, float stepSize) {
 
 /** Entry and exit of the view ray through the cylinder the funnel lives in. */
 bool boundsInterval(vec3 origin, vec3 dir, out float t0, out float t1) {
-    float maxRadius = max(max(wallRadius(1.0) * 1.5, ringRadius() * RING_ROUGH),
-                          coreRadius * WALL_REACH);
+    // Centred between the foot and the lowering rather than on the foot, so the cylinder holding both
+    // stays as small as it can. Every block of extra reach here is a march step spent on empty air.
+    float inflow = mesoInflow();
+    vec2 far = axisAt(groundY + funnelHeight) - axisXZ
+             + vec2(cos(inflow), sin(inflow)) * (coreRadius * WALL_OFFSET);
+    vec2 hub = axisXZ + far * 0.5;
+    float maxRadius = length(far) * 0.5
+        + max(max(wallRadius(1.0) * 1.5, ringRadius() * RING_ROUGH), coreRadius * WALL_REACH * 1.5);
     float floorY = groundY - coreRadius * RING_DROP;
-    vec2 oc = origin.xz - axisXZ;
+    vec2 oc = origin.xz - hub;
     float a = dot(dir.xz, dir.xz);
     float b = 2.0 * dot(oc, dir.xz);
     float c = dot(oc, oc) - maxRadius * maxRadius;
@@ -400,7 +457,12 @@ void main() {
         discard;
     }
 
-    int steps = marchSteps();
+    // The lowering reaches several times further than the column, and a fixed count spread over that
+    // whole bound steps clean over the condensation sheath, which is a shell a fraction of a core radius
+    // thick: the column then comes out as a wire hanging off a cloud. The sheath is the one sample the
+    // march cannot miss, so the count is read off its thickness, with the player's setting as the floor.
+    int baseSteps = marchSteps();
+    int steps = clamp(int((t1 - t0) / max(coreRadius * 0.12, 1.0)), baseSteps, baseSteps * 3);
     float stepSize = (t1 - t0) / float(steps);
     // A fixed step pattern draws visible shells; offsetting the first sample by a per-pixel amount
     // turns that banding into noise the eye stops seeing.
