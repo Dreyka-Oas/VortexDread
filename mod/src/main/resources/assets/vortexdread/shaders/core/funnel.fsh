@@ -341,7 +341,19 @@ float funnelDensity(vec3 p, out float dustShare) {
     float fineness = DETAIL_REFERENCE / detailSize();
     vec3 sample = vec3(cos(wound), 0.0, sin(wound)) * (radius * 0.35 * fineness)
                 + vec3(0.0, (p.y * 0.16 - GameTime * 900.0) * fineness, 0.0);
-    float roughness = fbm(sample) - 0.5;
+
+    // Broken with a second field taken in the column's own space rather than along the winding. A noise
+    // read on one coordinate is a one dimensional field however it is dressed up, and the level sets of
+    // one of those draw closed contours on the surface: what comes out is wood grain, rings inside rings
+    // round a knot, which is the one thing on the column an eye goes straight to.
+    float ct = cos(turn);
+    float st = sin(turn);
+    vec3 local = vec3(p.x - axis.x, p.y - groundY, p.z - axis.y);
+    vec3 turned = vec3(ct * local.x - st * local.z, local.y, st * local.x + ct * local.z);
+    float grain = fbm(turned * (0.06 * fineness)
+                      + vec3(0.0, -GameTime * 430.0 * fineness, 0.0)) - 0.5;
+
+    float roughness = mix(fbm(sample) - 0.5, grain, 0.45);
 
     // A violent tornado rarely turns as one column. Two to five smaller vortices orbit the axis inside
     // the parent circulation and turn faster than it does, and that braid is what tells a photograph of
