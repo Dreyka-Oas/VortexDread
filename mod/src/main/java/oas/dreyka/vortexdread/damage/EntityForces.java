@@ -52,20 +52,28 @@ public final class EntityForces {
 
             boolean lift = speed >= DamageConfig.liftThreshold
                     && (DamageConfig.liftPlayers || !(victim instanceof Player));
-            double vertical = lift ? wind.y : Math.min(wind.y, 0.0);
+            boolean carried = lift
+                    && VortexRide.holds(parameters, victim.getX(), victim.getY(), victim.getZ());
 
-            double response = MAX_RESPONSE * Math.min(1.0, speed / Math.max(1.0f, parameters.peakWind()));
-            Vec3 current = victim.getDeltaMovement();
-            Vec3 target = new Vec3(wind.x / 20.0, vertical / 20.0, wind.z / 20.0);
-            victim.setDeltaMovement(current.lerp(target, response));
-            victim.hurtMarked = true;
+            if (carried) {
+                VortexRide.carry(parameters, victim, wind);
+            } else {
+                double vertical = lift ? wind.y : Math.min(wind.y, 0.0);
+                double response = MAX_RESPONSE * Math.min(1.0, speed / Math.max(1.0f, parameters.peakWind()));
+                Vec3 current = victim.getDeltaMovement();
+                Vec3 target = new Vec3(wind.x / 20.0, vertical / 20.0, wind.z / 20.0);
+                victim.setDeltaMovement(current.lerp(target, response));
+                victim.hurtMarked = true;
+            }
 
             if (victim instanceof ServerPlayer player) {
                 // The client owns a player's position, so a velocity the server never sends is a
                 // velocity the player never feels.
                 player.connection.send(new ClientboundSetEntityMotionPacket(player));
             }
-            if (victim instanceof LivingEntity living) {
+            // The column itself does not grind anyone down. What it has hold of it carries up and throws,
+            // and the wind only counts against whatever it failed to pick up.
+            if (!carried && victim instanceof LivingEntity living) {
                 StormDamage.byWind(level, living, speed);
             }
         }

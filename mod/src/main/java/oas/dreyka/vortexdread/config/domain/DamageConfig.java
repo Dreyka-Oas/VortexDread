@@ -30,13 +30,16 @@ public final class DamageConfig {
      */
     public static boolean debrisSettles = false;
 
-    /** Whether entities caught in the flow take damage from the wind and from what it throws. */
+    /**
+     * Whether the wind outside the funnel and the debris it throws hurt anyone. What the column has
+     * actually picked up is carried and thrown rather than hurt, whatever this says.
+     */
     public static boolean damageEntities = true;
 
     /** Multiplies every point of damage the storm deals, wind and impact alike. */
     public static double damageScale = 1.0;
 
-    /** Whether players are picked up. Off still throws mobs and items, and still hurts. */
+    /** Whether players are taken up the funnel. Off leaves them in the wind, which does hurt. */
     public static boolean liftPlayers = true;
 
     /** Wind speed, in blocks per second, under which nothing is lifted at all. */
