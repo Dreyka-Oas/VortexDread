@@ -18,8 +18,14 @@ public final class StormConfig {
     /** Ticks of quiet enforced after a tornado dissipates, whatever the odds say. */
     public static int cooldownTicks = 9600;
 
-    /** How many funnels may be alive at once in one dimension. */
-    public static int maxConcurrent = 1;
+    /**
+     * How many funnels may be alive at once in one dimension.
+     *
+     * <p>Outbreaks are what real tornado days are made of, and a cap of one turns every one of them
+     * into a single funnel crossing an empty sky. Three leaves room for a second one on the horizon
+     * without the odds above ever producing a wall of them.
+     */
+    public static int maxConcurrent = 3;
 
     /**
      * Shifts the random rating, in EF steps. Negative keeps the sky to weak tornadoes, positive makes
@@ -29,6 +35,16 @@ public final class StormConfig {
 
     /** Distance at which a player starts hearing the roar and seeing the sky turn. */
     public static int warningRadius = 640;
+
+    /**
+     * How far a storm is announced to a player who has no entity for it, in blocks.
+     *
+     * <p>Vanilla stops sending an entity at the server's view distance, which is a few hundred blocks,
+     * while a mod that draws far terrain puts a horizon tens of kilometres out. A funnel that switches
+     * off exactly where the view opens up is the worst place it could possibly do so. Zero turns this
+     * off and leaves the funnel inside the tracker, where it was before.
+     */
+    public static double distantStormReach = 2048.0;
 
     /** Whether the mod takes over the look of a thunderstorm at all. Off leaves vanilla weather. */
     public static boolean rebuildStorms = true;

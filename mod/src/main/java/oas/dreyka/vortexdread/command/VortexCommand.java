@@ -6,12 +6,16 @@ import oas.dreyka.vortexdread.config.domain.ComputeConfig;
 import oas.dreyka.vortexdread.config.domain.StormConfig;
 import oas.dreyka.vortexdread.entity.TornadoEntity;
 import oas.dreyka.vortexdread.entity.VortexEntities;
+import oas.dreyka.vortexdread.tornado.FunnelBuild;
 import oas.dreyka.vortexdread.tornado.RatingRoll;
 import oas.dreyka.vortexdread.wind.EfScale;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.coordinates.Vec2Argument;
@@ -37,8 +41,12 @@ public final class VortexCommand {
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("vortex")
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS));
 
+        // Five arguments, each one optional from the left, because the two people who use this want
+        // different things from it: a rating and nothing else while playing, and every number named
+        // while setting a scene up. A required argument anywhere in that chain costs both of them.
         root.then(Commands.literal("spawn")
-                .executes(context -> spawn(context.getSource(), here(context.getSource()), null))
+                .executes(context -> spawn(context.getSource(), here(context.getSource()),
+                        null, null, -1.0, -1))
                 .then(Commands.argument("rating", StringArgumentType.word())
                         .suggests((context, builder) -> {
                             for (EfScale scale : EfScale.values()) {
@@ -47,11 +55,29 @@ public final class VortexCommand {
                             return builder.buildFuture();
                         })
                         .executes(context -> spawn(context.getSource(), here(context.getSource()),
-                                parse(StringArgumentType.getString(context, "rating"))))
+                                rating(context), null, -1.0, -1))
                         .then(Commands.argument("pos", Vec2Argument.vec2())
-                                .executes(context -> spawn(context.getSource(),
-                                        Vec2Argument.getVec2(context, "pos"),
-                                        parse(StringArgumentType.getString(context, "rating")))))));
+                                .executes(context -> spawn(context.getSource(), at(context),
+                                        rating(context), null, -1.0, -1))
+                                .then(Commands.argument("build", StringArgumentType.word())
+                                        .suggests((context, builder) -> {
+                                            for (FunnelBuild shape : FunnelBuild.values()) {
+                                                builder.suggest(shape.key());
+                                            }
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(context -> spawn(context.getSource(), at(context),
+                                                rating(context), build(context), -1.0, -1))
+                                        .then(Commands.argument("speed", DoubleArgumentType.doubleArg(0.0, 120.0))
+                                                .executes(context -> spawn(context.getSource(), at(context),
+                                                        rating(context), build(context), speed(context), -1))
+                                                .then(Commands.argument("seconds",
+                                                                IntegerArgumentType.integer(1, 3600))
+                                                        .executes(context -> spawn(context.getSource(),
+                                                                at(context), rating(context), build(context),
+                                                                speed(context),
+                                                                IntegerArgumentType.getInteger(
+                                                                        context, "seconds") * 20))))))));
 
         root.then(Commands.literal("list").executes(context -> list(context.getSource())));
         root.then(Commands.literal("clear").executes(context -> clear(context.getSource())));
@@ -68,6 +94,22 @@ public final class VortexCommand {
         return new Vec2((float) position.x, (float) position.z);
     }
 
+    private static EfScale rating(CommandContext<CommandSourceStack> context) {
+        return parse(StringArgumentType.getString(context, "rating"));
+    }
+
+    private static FunnelBuild build(CommandContext<CommandSourceStack> context) {
+        return FunnelBuild.byKey(StringArgumentType.getString(context, "build"));
+    }
+
+    private static Vec2 at(CommandContext<CommandSourceStack> context) {
+        return Vec2Argument.getVec2(context, "pos");
+    }
+
+    private static double speed(CommandContext<CommandSourceStack> context) {
+        return DoubleArgumentType.getDouble(context, "speed");
+    }
+
     private static EfScale parse(String written) {
         for (EfScale scale : EfScale.values()) {
             if (scale.name().equalsIgnoreCase(written)) {
@@ -77,23 +119,27 @@ public final class VortexCommand {
         return null;
     }
 
-    private static int spawn(CommandSourceStack source, Vec2 where, EfScale wanted) {
+    private static int spawn(CommandSourceStack source, Vec2 where, EfScale wanted, FunnelBuild asked,
+                             double travelSpeed, int lifespanTicks) {
         ServerLevel level = source.getLevel();
         java.util.random.RandomGenerator random = oas.dreyka.vortexdread.VortexRandom.of(level.random);
         float peak = wanted == null
                 ? RatingRoll.drawPeakWind(random, StormConfig.ratingBias)
                 : RatingRoll.windInside(wanted, random);
+        FunnelBuild build = asked == null ? FunnelBuild.roll(random) : asked;
 
-        TornadoEntity tornado = TornadoEntity.spawn(level, where.x, where.y, peak);
+        TornadoEntity tornado = TornadoEntity.spawn(level, where.x, where.y, peak, build,
+                travelSpeed, lifespanTicks);
         if (tornado == null) {
             return 0;
         }
         EfScale rating = EfScale.fromWind(peak);
-        VortexDread.LOGGER.info("[VortexDread] tornado spawned: {} peak {} m/s at {} {} in {}",
-                rating.name(), String.format(Locale.ROOT, "%.1f", peak),
+        VortexDread.LOGGER.info("[VortexDread] tornado spawned: {} {} peak {} m/s at {} {} in {}",
+                rating.name(), build.key(), String.format(Locale.ROOT, "%.1f", peak),
                 Math.round(tornado.getX()), Math.round(tornado.getZ()), level.dimension().identifier());
         source.sendSuccess(() -> Component.translatable("vortexdread.command.spawned",
                 Component.translatable(rating.translationKey()),
+                Component.translatable(build.translationKey()),
                 Math.round(tornado.getX()), Math.round(tornado.getY()), Math.round(tornado.getZ())), true);
         return 1;
     }
@@ -111,6 +157,7 @@ public final class VortexCommand {
             // EF2 while it is thirty blocks wide reads as a bug to whoever asked.
             source.sendSuccess(() -> Component.translatable("vortexdread.command.listed",
                     Component.translatable(tornado.peakRating().translationKey()),
+                    Component.translatable(tornado.build().translationKey()),
                     Component.translatable(tornado.stage().translationKey()),
                     Math.round(Math.sqrt(tornado.distanceToSqr(from))),
                     Math.round(tornado.coreRadius()),

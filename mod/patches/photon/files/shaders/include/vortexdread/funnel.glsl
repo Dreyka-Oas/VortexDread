@@ -68,7 +68,7 @@ const float vortexdread_lean = 1.8;
 // A lowering is a slab, wide and shallow. Given as much depth as width it draws a ball sitting on the
 // column, and the pack's own deck above it is what continues it upward, so it needs almost no rise.
 const float vortexdread_wall_hang = 0.14;
-const float vortexdread_wall_rise = 0.35;
+const float vortexdread_wall_rise = 0.9;
 
 // The mass overhead, both measured in funnel heights, and how many samples it is worth. Few,
 // because it is a slab: what a ray does inside one is the distance it crosses.
@@ -582,7 +582,7 @@ vec3 vortexdread_draw_one(
     // march cannot miss, so the count is read off its thickness, with the player's setting as the floor.
     int base_steps = vortexdread_march_steps();
     int steps = clamp(
-        int((t1 - t0) / max(f.core_radius * 0.12, 1.0)), base_steps, base_steps * 3);
+        int((t1 - t0) / max(f.core_radius * 0.18, 1.0)), base_steps, base_steps * 2);
     float step_size = (t1 - t0) / float(steps);
 
     // Condensation is water, and water is white. What colours a funnel is the ground in it, and even a
@@ -813,7 +813,12 @@ vec3 vortexdread_draw_meso(
         // Stepped rather than poured: air feeding a base condenses at a few levels rather than at every
         // height at once, so the underside comes down in shelves with edges on them. Blended back
         // toward the smooth field, since pure steps give the whole thing a staircase.
-        float shelves = floor(mass * 4.0) / 4.0;
+        // The step is taken against a finer field rather than against a fixed threshold. Quantising a
+        // smooth two dimensional field draws its level sets, and those are closed curves: what comes out
+        // is contour lines on a map, rings centred on the storm and visible right across the sky. Carried
+        // in, the shelf edges wander over a few hundred metres and stop closing on themselves.
+        float step_break = vortexdread_value_noise(vec3(offset * (13.0 / reach), clock * 0.02));
+        float shelves = floor(mass * 4.0 + step_break * 0.9 - 0.45) / 4.0;
         float local_floor = base
             - f.height * vortexdread_meso_sag * taper * (0.25 + 2.1 * mix(mass, shelves, 0.55));
 

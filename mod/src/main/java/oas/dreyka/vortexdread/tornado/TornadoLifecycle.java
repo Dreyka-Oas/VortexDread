@@ -49,7 +49,8 @@ public final class TornadoLifecycle {
         this.peakWind = peakWind;
         this.shape = shape;
         this.matureRadius = shape.coreRadiusAtEf0()
-                * Math.pow(peakWind / EfScale.EF0.minWind(), shape.radiusGrowthExponent());
+                * Math.pow(peakWind / EfScale.EF0.minWind(), shape.radiusGrowthExponent())
+                * shape.build().widthFactor();
     }
 
     /** One tick older. */
@@ -80,6 +81,11 @@ public final class TornadoLifecycle {
     /** Mature core radius, in blocks, before the narrowing at either end of the life. */
     public double matureRadius() {
         return matureRadius;
+    }
+
+    /** How this one was built, which is what decides its width and how far up it reaches. */
+    public FunnelBuild build() {
+        return shape.build();
     }
 
     /** How far through its life it is, 0 at birth and 1 when it is over. */

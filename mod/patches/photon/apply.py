@@ -141,20 +141,27 @@ EDITS = (
         ),
         # The aperture. Photon reads the frame it was handed and opens up until the median lands where
         # it wants it, so a storm that only takes light out of the picture downstream has that light
-        # handed straight back and comes out as an oscillation instead of a mood. Closing the aperture
+        # handed straight back and comes out as an oscillation instead of a mood. Moving the aperture
         # itself is the one change the pack cannot undo a frame later.
+        #
+        # Applied here at the point the exposure is spent, and not in c4 where it is computed, because
+        # c4 stores what it computes as the history the next frame's running average starts from. A
+        # factor written in there is re-applied every frame against a target that already carries it,
+        # which converges on the factor raised to a power rather than on the factor, and past a certain
+        # value does not converge at all. Read from the same texel c14 already reads, so this costs one
+        # multiply on a value the pass had in hand anyway.
         (
-            "shaders/program/c4_taa_exposure.vsh",
-            "void main() {\n    uv = gl_MultiTexCoord0.xy;",
+            "shaders/program/c14_color_grading.fsh",
+            "void main() {",
             '#include "/include/vortexdread/exposure.glsl"\n\n'
-            "void main() {\n    uv = gl_MultiTexCoord0.xy;",
+            "void main() {",
             1,
         ),
         (
-            "shaders/program/c4_taa_exposure.vsh",
-            "    exposure = mix(target_exposure, previous_exposure, blend_weight);\n#endif",
-            "    exposure = mix(target_exposure, previous_exposure, blend_weight);\n#endif\n\n"
-            "    // Vortex Dread: what the storm overhead takes out of the whole frame\n"
+            "shaders/program/c14_color_grading.fsh",
+            "    float exposure = texelFetch(colortex5, ivec2(0), 0).a;",
+            "    float exposure = texelFetch(colortex5, ivec2(0), 0).a;\n"
+            "    // Vortex Dread: where the storm overhead puts the aperture\n"
             "    exposure *= vortexdread_exposure_scale();",
             1,
         ),

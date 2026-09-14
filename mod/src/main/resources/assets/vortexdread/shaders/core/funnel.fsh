@@ -200,7 +200,7 @@ float ringDensity(vec3 p, float roughness) {
 // into one silhouette with a rounded top, which is a mushroom and not a storm.
 const float WALL_REACH = 5.2;
 const float WALL_HANG = 0.14;
-const float WALL_RISE = 0.35;
+const float WALL_RISE = 0.9;
 
 // How far off the column the lowering sits, in core radii. A funnel comes down from a corner of the
 // block of cloud, never from the middle of it, and that offset is most of what tells the two apart.
@@ -474,7 +474,7 @@ void main() {
     // thick: the column then comes out as a wire hanging off a cloud. The sheath is the one sample the
     // march cannot miss, so the count is read off its thickness, with the player's setting as the floor.
     int baseSteps = marchSteps();
-    int steps = clamp(int((t1 - t0) / max(coreRadius * 0.12, 1.0)), baseSteps, baseSteps * 3);
+    int steps = clamp(int((t1 - t0) / max(coreRadius * 0.18, 1.0)), baseSteps, baseSteps * 2);
     float stepSize = (t1 - t0) / float(steps);
     // A fixed step pattern draws visible shells; offsetting the first sample by a per-pixel amount
     // turns that banding into noise the eye stops seeing.

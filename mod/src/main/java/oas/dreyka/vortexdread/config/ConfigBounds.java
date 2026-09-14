@@ -57,6 +57,8 @@ public final class ConfigBounds {
         m.put("advectionThreads", new Range(0, 64));
         m.put("advectionBatch", new Range(64, 1_048_576));
 
+        m.put("distantStormReach", new Range(0.0, 2048.0));
+
         m.put("funnelSteps", new Range(8, 256));
         m.put("funnelLightSteps", new Range(0, 32));
         m.put("funnelDetail", new Range(0.2, 32.0));

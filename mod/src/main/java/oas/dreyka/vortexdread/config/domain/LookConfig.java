@@ -17,8 +17,13 @@ public final class LookConfig {
     /** Size of the smallest visible wisp, in blocks. Smaller wants more steps to stay quiet. */
     public static double funnelDetail = 1.8;
 
-    /** How far the funnel is still drawn, in blocks. Beyond it the storm is sky and sound. */
-    public static double funnelRenderDistance = 1024.0;
+    /**
+     * How far the funnel is still drawn, in blocks. Beyond it the storm is sky and sound.
+     *
+     * <p>Well past what vanilla would ever send an entity for, because a mod drawing far terrain puts
+     * the horizon tens of kilometres out and the storm on it arrives over the network instead.
+     */
+    public static double funnelRenderDistance = 2048.0;
 
     /** Whether the screen moves when the wind does. Off for anyone who cannot take it. */
     public static boolean screenShake = true;

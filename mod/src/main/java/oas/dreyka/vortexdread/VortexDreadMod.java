@@ -5,6 +5,7 @@ import oas.dreyka.vortexdread.compute.AdvectionCompute;
 import oas.dreyka.vortexdread.config.ConfigIo;
 import oas.dreyka.vortexdread.debris.DebrisSwarm;
 import oas.dreyka.vortexdread.entity.VortexEntities;
+import oas.dreyka.vortexdread.network.StormPayloads;
 import oas.dreyka.vortexdread.sound.VortexSounds;
 import oas.dreyka.vortexdread.storm.StormDirector;
 
@@ -22,6 +23,7 @@ public class VortexDreadMod implements ModInitializer {
         VortexSounds.register();
         StormDirector.register();
         DebrisSwarm.register();
+        StormPayloads.registerCommon();
         CommandRegistrationCallback.EVENT.register(
                 (dispatcher, registry, environment) -> VortexCommand.register(dispatcher));
         // Opened here rather than at the first dispatch: enumerating devices and building a program takes

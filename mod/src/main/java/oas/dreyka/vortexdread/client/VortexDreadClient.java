@@ -2,6 +2,8 @@ package oas.dreyka.vortexdread.client;
 
 import oas.dreyka.vortexdread.VortexDread;
 import oas.dreyka.vortexdread.client.render.DebrisRenderer;
+import oas.dreyka.vortexdread.client.render.DistantFunnelRenderer;
+import oas.dreyka.vortexdread.client.render.DistantStorms;
 import oas.dreyka.vortexdread.client.render.FunnelState;
 import oas.dreyka.vortexdread.client.render.StormPostEffect;
 import oas.dreyka.vortexdread.client.render.TornadoRenderer;
@@ -18,6 +20,8 @@ public class VortexDreadClient implements ClientModInitializer {
     public void onInitializeClient() {
         EntityRendererRegistry.register(VortexEntities.TORNADO, TornadoRenderer::new);
         EntityRendererRegistry.register(VortexEntities.DEBRIS, DebrisRenderer::new);
+        DistantStorms.register();
+        DistantFunnelRenderer.register();
         FunnelState.register();
         StormAudio.register();
         StormPostEffect.register();

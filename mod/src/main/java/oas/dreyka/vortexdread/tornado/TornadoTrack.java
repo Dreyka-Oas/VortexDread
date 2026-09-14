@@ -54,6 +54,11 @@ public final class TornadoTrack {
     }
 
     /** The seed this track was built from, so a saved storm resumes on the same curve. */
+    /** Ground speed in blocks per second, which a spawn may have set away from the config's. */
+    public double speed() {
+        return speed;
+    }
+
     public long seed() {
         return seed;
     }

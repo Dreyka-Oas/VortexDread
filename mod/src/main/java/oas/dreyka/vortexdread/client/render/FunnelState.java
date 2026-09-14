@@ -3,6 +3,7 @@ package oas.dreyka.vortexdread.client.render;
 import oas.dreyka.vortexdread.VortexDread;
 import oas.dreyka.vortexdread.config.domain.LookConfig;
 import oas.dreyka.vortexdread.entity.TornadoEntity;
+import oas.dreyka.vortexdread.network.StormDigest;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -98,27 +99,24 @@ public final class FunnelState {
         // The nearest ones rather than the first ones the level happens to hand over. Sixteen storms can
         // be running at once and only four fit, so an arbitrary four means the one filling the screen
         // can be the one left out, which looks exactly like the funnel failing to draw.
-        TornadoEntity[] nearest = new TornadoEntity[MAX_FUNNELS];
+        StormDigest[] nearest = new StormDigest[MAX_FUNNELS];
         double[] distances = new double[MAX_FUNNELS];
         int found = 0;
         if (client.level != null) {
             for (var entity : client.level.entitiesForRendering()) {
-                if (!(entity instanceof TornadoEntity tornado)) {
-                    continue;
+                if (entity instanceof TornadoEntity tornado) {
+                    found = offer(nearest, distances, found, StormDigest.of(tornado), camera);
                 }
-                double dx = tornado.getX() - camera.x;
-                double dz = tornado.getZ() - camera.z;
-                if (Math.abs(dx) > REACH || Math.abs(dz) > REACH) {
-                    continue;
-                }
-                found = insert(nearest, distances, found, tornado, dx * dx + dz * dz);
             }
+        }
+        for (StormDigest distant : DistantStorms.withoutEntity(client.level)) {
+            found = offer(nearest, distances, found, distant, camera);
         }
 
         int row = 0;
         while (row < found) {
-            TornadoEntity tornado = nearest[row];
-            describe(pixels, row, tornado, tornado.getX() - camera.x, tornado.getZ() - camera.z);
+            StormDigest storm = nearest[row];
+            describe(pixels, row, storm, storm.x() - camera.x, storm.z() - camera.z);
             row++;
         }
         for (int empty = row; empty < MAX_FUNNELS; empty++) {
@@ -132,17 +130,28 @@ public final class FunnelState {
         state.upload();
     }
 
-    private static void describe(NativeImage pixels, int row, TornadoEntity tornado, double dx, double dz) {
+    /** Puts one storm in front of the sort, if it is close enough to be worth a row at all. */
+    private static int offer(StormDigest[] nearest, double[] distances, int found,
+            StormDigest storm, Vec3 camera) {
+        double dx = storm.x() - camera.x;
+        double dz = storm.z() - camera.z;
+        if (Math.abs(dx) > REACH || Math.abs(dz) > REACH) {
+            return found;
+        }
+        return insert(nearest, distances, found, storm, dx * dx + dz * dz);
+    }
+
+    private static void describe(NativeImage pixels, int row, StormDigest storm, double dx, double dz) {
         pair(pixels, 0, row, (dx + REACH) / (REACH * 2.0), (dz + REACH) / (REACH * 2.0));
-        pair(pixels, 1, row, (tornado.groundY() - GROUND_FLOOR) / GROUND_SPAN,
-                tornado.coreRadius() / RADIUS_SPAN);
-        pair(pixels, 2, row, tornado.funnelHeight() / HEIGHT_SPAN, tornado.descent());
+        pair(pixels, 1, row, (storm.groundY() - GROUND_FLOOR) / GROUND_SPAN,
+                storm.coreRadius() / RADIUS_SPAN);
+        pair(pixels, 2, row, storm.height() / HEIGHT_SPAN, storm.descent());
 
-        int tint = tornado.tint();
+        int tint = storm.tint();
         pixels.setPixel(3, row, rgba((tint >> 16) & 0xFF, (tint >> 8) & 0xFF, tint & 0xFF,
-                byteOf(tornado.groundLoad())));
+                byteOf(storm.groundLoad())));
 
-        pair(pixels, 4, row, tornado.flash(), windFraction(tornado));
+        pair(pixels, 4, row, storm.flash(), storm.windShare());
         // Says the row holds a funnel at all, so the pack can stop reading rather than marching four
         // volumes of nothing on every pixel of the screen.
         pixels.setPixel(5, row, rgba(255, 0, 0, 255));
@@ -157,8 +166,8 @@ public final class FunnelState {
      *
      * @return how many entries the list holds afterwards
      */
-    static int insert(TornadoEntity[] nearest, double[] distances, int found,
-            TornadoEntity tornado, double distance) {
+    static int insert(StormDigest[] nearest, double[] distances, int found,
+            StormDigest storm, double distance) {
         if (found == MAX_FUNNELS && distance >= distances[MAX_FUNNELS - 1]) {
             return found;
         }
@@ -168,7 +177,7 @@ public final class FunnelState {
             distances[at] = distances[at - 1];
             at--;
         }
-        nearest[at] = tornado;
+        nearest[at] = storm;
         distances[at] = distance;
         return Math.min(found + 1, MAX_FUNNELS);
     }
@@ -180,11 +189,6 @@ public final class FunnelState {
         pair(pixels, SETTINGS_FIELD + 1, row, LookConfig.funnelDetail / DETAIL_SPAN, 0.0);
     }
 
-    /** How fast this one is turning against the strongest it will ever turn. */
-    private static float windFraction(TornadoEntity tornado) {
-        float peak = Math.max(1.0f, tornado.peakWind());
-        return Math.min(1.0f, tornado.wind() / peak);
-    }
 
     /**
      * Two numbers into one texel, each across two channels.

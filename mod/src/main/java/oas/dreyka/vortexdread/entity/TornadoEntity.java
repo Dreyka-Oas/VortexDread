@@ -9,6 +9,7 @@ import oas.dreyka.vortexdread.config.domain.TornadoConfig;
 import oas.dreyka.vortexdread.damage.DestructionSweep;
 import oas.dreyka.vortexdread.damage.EntityForces;
 import oas.dreyka.vortexdread.storm.FunnelLightning;
+import oas.dreyka.vortexdread.tornado.FunnelBuild;
 import oas.dreyka.vortexdread.tornado.FunnelShape;
 import oas.dreyka.vortexdread.tornado.RatingRoll;
 import oas.dreyka.vortexdread.tornado.TornadoLifecycle;
@@ -73,6 +74,16 @@ public class TornadoEntity extends Entity implements TornadoView {
     /** Widest area a funnel keeps loaded, in chunks. Past this the cost outgrows what is destroyed. */
     private static final int MAX_ANCHOR_RADIUS = 5;
 
+    /**
+     * Narrowest area a funnel keeps loaded, in chunks.
+     *
+     * <p>A radius of one leaves the chunk under the funnel loaded but one level short of ticking its
+     * entities, so a rope narrow enough to ask for only one chunk stops ageing the moment the last
+     * player walks away and is still hanging out of the cloud a quarter of an hour later. Two is the
+     * first radius that reaches the entity ticking level, and it costs a handful of chunks.
+     */
+    private static final int MIN_ANCHOR_RADIUS = 2;
+
     /** Blocks torn out in one tick that count as a full load of ground in the air. */
     private static final float FULL_GROUND_LOAD = 24.0f;
 
@@ -99,17 +110,37 @@ public class TornadoEntity extends Entity implements TornadoView {
         this.track = new TornadoTrack(0.0, 0.0, 0.0, TornadoConfig.travelSpeed, TornadoConfig.trackWander, 0L);
     }
 
-    /** Starts a tornado of a drawn strength at a place on the map. */
+    /** Starts a tornado of a drawn strength at a place on the map, built whichever way the dice say. */
     public static TornadoEntity spawn(ServerLevel level, double x, double z, float peakWind) {
+        return spawn(level, x, z, peakWind, FunnelBuild.roll(VortexRandom.of(level.random)));
+    }
+
+    /** The same, with the build named. */
+    public static TornadoEntity spawn(ServerLevel level, double x, double z, float peakWind,
+                                      FunnelBuild build) {
+        return spawn(level, x, z, peakWind, build, -1.0, -1);
+    }
+
+    /**
+     * The full order, which is what the command hands in.
+     *
+     * <p>A negative speed or lifespan means the config decides that one, so a caller can name the two
+     * it cares about without having to look the others up.
+     */
+    public static TornadoEntity spawn(ServerLevel level, double x, double z, float peakWind,
+                                      FunnelBuild build, double travelSpeed, int lifespanTicks) {
         TornadoEntity tornado = VortexEntities.TORNADO.create(level, net.minecraft.world.entity.EntitySpawnReason.EVENT);
         if (tornado == null) {
             return null;
         }
-        int lifespan = TornadoConfig.lifespanMinTicks
-                + level.random.nextInt(Math.max(1, TornadoConfig.lifespanMaxTicks - TornadoConfig.lifespanMinTicks + 1));
-        tornado.lifecycle = new TornadoLifecycle(lifespan, peakWind, FunnelShape.fromConfig());
+        int lifespan = lifespanTicks > 0
+                ? lifespanTicks
+                : TornadoConfig.lifespanMinTicks + level.random.nextInt(
+                        Math.max(1, TornadoConfig.lifespanMaxTicks - TornadoConfig.lifespanMinTicks + 1));
+        double speed = travelSpeed >= 0.0 ? travelSpeed : TornadoConfig.travelSpeed;
+        tornado.lifecycle = new TornadoLifecycle(lifespan, peakWind, FunnelShape.fromConfig(build));
         tornado.track = new TornadoTrack(x, z, level.random.nextDouble() * Math.PI * 2.0,
-                TornadoConfig.travelSpeed, TornadoConfig.trackWander, level.random.nextLong());
+                speed, TornadoConfig.trackWander, level.random.nextLong());
         // The ground has to be there before the funnel asks how high it is, or the tornado reads the
         // bottom of the world and hangs in the sky.
         tornado.anchor(level, x, z);
@@ -196,7 +227,7 @@ public class TornadoEntity extends Entity implements TornadoView {
         int radius = (int) Math.ceil(coreRadius() * VortexParameters.INFLUENCE_FACTOR / 16.0);
         level.getChunkSource().addTicketWithRadius(VortexEntities.TORNADO_TICKET,
                 new net.minecraft.world.level.ChunkPos((int) Math.floor(x) >> 4, (int) Math.floor(z) >> 4),
-                Math.max(1, Math.min(radius, MAX_ANCHOR_RADIUS)));
+                Math.max(MIN_ANCHOR_RADIUS, Math.min(radius, MAX_ANCHOR_RADIUS)));
     }
 
     /** Moves the entity onto its track and reads the ground under it. */
@@ -218,13 +249,19 @@ public class TornadoEntity extends Entity implements TornadoView {
         entityData.set(DATA_TINT, tint.packed());
         // Sent rather than read from the client's own file: a player whose config disagrees with the
         // server's would otherwise draw a funnel that stops short of the cloud it is hanging from.
-        entityData.set(DATA_FUNNEL_HEIGHT, (float) TornadoConfig.funnelHeightAbove(groundY()));
+        entityData.set(DATA_FUNNEL_HEIGHT,
+                (float) (TornadoConfig.funnelHeightAbove(groundY()) * lifecycle.build().heightFactor()));
     }
 
     /** Ground to wall cloud, in blocks. */
     @Override
     public float funnelHeight() {
         return entityData.get(DATA_FUNNEL_HEIGHT);
+    }
+
+    /** How this one was built, for the command's listing and for anything that wants to say so. */
+    public FunnelBuild build() {
+        return lifecycle.build();
     }
 
     /** The wind field of this tornado right now, valid on either side. */
@@ -367,12 +404,16 @@ public class TornadoEntity extends Entity implements TornadoView {
     protected void readAdditionalSaveData(ValueInput input) {
         float peak = input.getFloatOr("PeakWind", EfScale.EF0.minWind());
         int lifespan = Math.max(1, input.getIntOr("Lifespan", TornadoConfig.lifespanMinTicks));
-        lifecycle = new TornadoLifecycle(lifespan, peak, FunnelShape.fromConfig());
+        FunnelBuild build = FunnelBuild.byKey(input.getStringOr("Build", FunnelBuild.STOVEPIPE.key()));
+        lifecycle = new TornadoLifecycle(lifespan, peak, FunnelShape.fromConfig(build));
         lifecycle.restoreAge(input.getIntOr("Age", 0));
 
         double heading = input.read("Heading", Codec.DOUBLE).orElse(0.0);
         double elapsed = input.read("Elapsed", Codec.DOUBLE).orElse(0.0);
-        track = new TornadoTrack(getX(), getZ(), heading, TornadoConfig.travelSpeed,
+        // Its own speed rather than the config's, since a tornado spawned with one named keeps it
+        // across a reload; an unsaved one falls back on the config, which is what it was anyway.
+        double speed = input.read("Speed", Codec.DOUBLE).orElse(TornadoConfig.travelSpeed);
+        track = new TornadoTrack(getX(), getZ(), heading, speed,
                 TornadoConfig.trackWander, input.read("TrackSeed", Codec.LONG).orElse(0L));
         track.restore(getX(), getZ(), heading, elapsed);
         tint.restore(input.getIntOr("Tint", DEFAULT_TINT), input.getIntOr("TintWeight", 0));
@@ -383,9 +424,11 @@ public class TornadoEntity extends Entity implements TornadoView {
         output.putFloat("PeakWind", lifecycle.peakWind());
         output.putInt("Lifespan", lifecycle.lifespanTicks());
         output.putInt("Age", lifecycle.age());
+        output.putString("Build", lifecycle.build().key());
         output.store("Heading", Codec.DOUBLE, track.heading());
         output.store("Elapsed", Codec.DOUBLE, track.elapsed());
         output.store("TrackSeed", Codec.LONG, track.seed());
+        output.store("Speed", Codec.DOUBLE, track.speed());
         output.putInt("Tint", tint.packed());
         output.putInt("TintWeight", tint.weight());
     }

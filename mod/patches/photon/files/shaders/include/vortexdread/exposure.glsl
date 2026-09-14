@@ -15,6 +15,17 @@
 
 uniform sampler2D colortex15;
 
+// The pack's own flash factor, which is what a bolt does to the whole sky here.
+#include "/include/misc/lightning_flash.glsl"
+
+// How far the aperture closes while a bolt is lit. The pack brightens the entire sky by a fixed factor
+// and its exposure is a running average that cannot follow a tenth of a second, so the frame clips to
+// flat white and every silhouette in it goes with it. Nobody standing under a storm sees white: what
+// they see is the mass lighting up from inside, and stopping down for the length of the flash is what
+// puts that back. Only while a storm of the mod's own is near, so an ordinary night keeps the pack's
+// behaviour.
+const float vortexdread_flash_stop = 0.66;
+
 const int vortexdread_exposure_rows = 4;
 const float vortexdread_exposure_reach = 2048.0;
 
@@ -24,9 +35,20 @@ const float vortexdread_exposure_reach = 2048.0;
 const float vortexdread_pall_full = 700.0;
 const float vortexdread_pall_gone = 2000.0;
 
-// The most of the light a storm directly overhead is allowed to take. Two and a half stops: a summer
-// afternoon under a supercell reads somewhere near dusk, and the pack's own tone curve does the rest.
-const float vortexdread_pall_depth = 0.72;
+// Where the aperture is put while a storm of the mod's own is overhead, against where the pack put it.
+//
+// Measured rather than chosen. At noon this pack renders a clear sky at a mean of 192 out of 255 and
+// the same sky under vanilla thunder at 41, which is a drop of more than two stops before the mod has
+// touched anything: the whole frame lands in the bottom sixth of the range and every colour in it is
+// gone. Nobody standing under a storm at midday sees that. What they see is dim, flat and grey, with
+// the colours still in it, which is about half of a clear noon. This number is what puts the frame
+// back there, and the pall below is then measured from somewhere an eye would recognise.
+const float vortexdread_storm_open = 2.3;
+
+// The most of the light a storm directly overhead is allowed to take, once the aperture is back where
+// the line above puts it. A summer afternoon under a supercell reads like an hour before dusk, and the
+// pack's own tone curve does the rest.
+const float vortexdread_pall_depth = 0.18;
 
 // What a storm that has not dropped anything yet already takes. A mesocyclone is overhead long before
 // a funnel is, and the deck is what blocks the sun, not the column under it.
@@ -68,7 +90,15 @@ float vortexdread_exposure_scale() {
         worst = max(worst, weight);
     }
 
-    return 1.0 - vortexdread_pall_depth * clamp(worst, 0.0, 1.0);
+    float near_storm = clamp(worst, 0.0, 1.0);
+    float flash = clamp(LIGHTNING_FLASH_UNIFORM, 0.0, 1.0) * near_storm;
+
+    // Opened first, then stopped down: the pall is a fraction of a daylight an eye would recognise, and
+    // taking it off the pack's own crushed value instead would be measuring darkness from darkness.
+    float open = mix(1.0, vortexdread_storm_open, near_storm);
+
+    return open * (1.0 - vortexdread_pall_depth * near_storm)
+               * (1.0 - vortexdread_flash_stop * flash);
 }
 
 #endif
