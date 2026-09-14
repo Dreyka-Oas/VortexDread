@@ -29,7 +29,6 @@ public final class ConfigBounds {
 
         m.put("tornadoChancePerMinute", new Range(0.0, 1.0));
         m.put("cooldownTicks", new Range(0, 1_728_000));
-        m.put("maxConcurrent", new Range(1, 16));
         m.put("ratingBias", new Range(-5.0, 5.0));
         m.put("warningRadius", new Range(32, 4096));
         m.put("cloudFlashesPerMinute", new Range(0, 600));

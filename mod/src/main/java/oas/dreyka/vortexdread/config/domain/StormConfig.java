@@ -19,15 +19,6 @@ public final class StormConfig {
     public static int cooldownTicks = 9600;
 
     /**
-     * How many funnels may be alive at once in one dimension.
-     *
-     * <p>Outbreaks are what real tornado days are made of, and a cap of one turns every one of them
-     * into a single funnel crossing an empty sky. Three leaves room for a second one on the horizon
-     * without the odds above ever producing a wall of them.
-     */
-    public static int maxConcurrent = 3;
-
-    /**
      * Shifts the random rating, in EF steps. Negative keeps the sky to weak tornadoes, positive makes
      * a violent one common. Zero follows the real distribution, where EF0 and EF1 are most of them.
      */

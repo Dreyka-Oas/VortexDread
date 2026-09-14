@@ -37,10 +37,10 @@ public final class TornadoConfig {
      * from the ground instead, a funnel standing on a mountain would push its wall cloud through the
      * deck the sky is already drawing, which is the one mistake that cannot be hidden.
      *
-     * <p>The default is where Photon puts its cumulus layer at stock settings, so the two meet. A pack
+     * <p>The default is where the patched Photon pack puts its cumulus layer, so the two meet. A pack
      * set to another altitude, or no pack at all, wants this moved with it.
      */
-    public static double cloudBaseAltitude = 183.0;
+    public static double cloudBaseAltitude = 264.0;
 
     /** Shortest funnel worth drawing, in blocks, for a tornado standing high enough to have no room. */
     private static final double MINIMUM_FUNNEL = 40.0;

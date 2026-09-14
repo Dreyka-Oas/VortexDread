@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.AABB;
 
 import java.util.HashMap;
@@ -40,6 +41,7 @@ public final class StormDirector {
     /** How far a mesocyclone may drift from every player before it is forgotten, in blocks. */
     private static final double ABANDON_DISTANCE = 4000.0;
 
+    private final StormSky sky = new StormSky();
     private Mesocyclone mesocyclone;
     private int cooldown;
     private int survey;
@@ -67,6 +69,10 @@ public final class StormDirector {
             return;
         }
         survey = 0;
+
+        // Before the seeding, because a funnel brought by an operator has to bring its sky whether or
+        // not the director is allowed to make any of its own.
+        holdTheSky(level);
 
         if (!StormConfig.naturalTornadoes) {
             mesocyclone = null;
@@ -123,7 +129,8 @@ public final class StormDirector {
 
     /** Rolls for a funnel reaching the ground, and starts one if it does. */
     private void attemptTouchdown(ServerLevel level) {
-        if (countAlive(level) >= StormConfig.maxConcurrent) {
+        // One at a time, and a new one takes the place of the old rather than joining it.
+        if (countAlive(level) > 0) {
             return;
         }
         double perSurvey = StormConfig.tornadoChancePerMinute / (60.0 * 20.0 / SURVEY_INTERVAL);
@@ -141,6 +148,34 @@ public final class StormDirector {
                 tornado.rating().name(), Math.round(tornado.getX()), Math.round(tornado.getZ()),
                 level.dimension().identifier());
         StormWarning.announce(level, tornado);
+    }
+
+    /**
+     * Puts the storm over a level that has a funnel in it, and gives the sky back when the last dies.
+     *
+     * <p>Dimensions that have no weather of their own are left out: the nether keeps no rain timer, so
+     * asking it to thunder writes nothing and reading it back reads nothing either.
+     */
+    private void holdTheSky(ServerLevel level) {
+        if (!StormConfig.rebuildStorms || !(level.getLevelData() instanceof ServerLevelData data)) {
+            return;
+        }
+        boolean had = sky.holding();
+        StormSky.Order order = sky.next(countAlive(level), new StormSky.Weather(
+                level.isRaining(), level.isThundering(), data.getRainTime(), data.getThunderTime()));
+        if (order == null) {
+            return;
+        }
+        if (had != sky.holding()) {
+            VortexDread.LOGGER.info("[VortexDread] sky {} in {}: raining {}, thundering {}",
+                    sky.holding() ? "taken by a funnel" : "given back",
+                    level.dimension().identifier(), order.raining(), order.thundering());
+        }
+        // Clear time and weather time in that order, and only one of the two is ever read: the game
+        // takes the first when it is being sent back to a clear sky and the second when it is not.
+        level.setWeatherParameters(order.thundering() || order.raining() ? 0 : order.rainTime(),
+                order.thundering() || order.raining() ? order.thunderTime() : 0,
+                order.raining(), order.thundering());
     }
 
     /** Whether every player has walked away from this column, which retires it. */

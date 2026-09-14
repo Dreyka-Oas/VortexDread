@@ -43,11 +43,24 @@ public record StormDigest(
 
     /** Reads one off a tornado the client already has, so both paths describe a storm the same way. */
     public static StormDigest of(TornadoEntity tornado) {
+        return of(tornado, 1.0f);
+    }
+
+    /**
+     * The same, placed where the storm stands partway through the tick being drawn.
+     *
+     * <p>A tornado crosses four blocks a second, so a position taken at the tick boundary and held for
+     * the three frames after it makes the column jump rather than travel. The entity renderer is handed
+     * a partial tick for exactly this reason; anything drawing the same storm beside it has to use the
+     * same one, or the two funnels sit a stride apart for most of every tick.
+     */
+    public static StormDigest of(TornadoEntity tornado, float partialTick) {
+        var where = tornado.getPosition(partialTick);
         float peak = Math.max(1.0f, tornado.peakWind());
         return new StormDigest(
                 tornado.getId(),
-                tornado.getX(),
-                tornado.getZ(),
+                where.x,
+                where.z,
                 (float) tornado.groundY(),
                 tornado.coreRadius(),
                 tornado.funnelHeight(),
