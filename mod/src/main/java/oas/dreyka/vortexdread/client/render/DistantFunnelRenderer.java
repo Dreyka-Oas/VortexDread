@@ -41,6 +41,9 @@ public final class DistantFunnelRenderer {
             if (client.level == null) {
                 return;
             }
+            if (ShaderPack.drawingTheWorld()) {
+                return;
+            }
             var storms = DistantStorms.withoutEntity(client.level);
             if (storms.isEmpty()) {
                 return;

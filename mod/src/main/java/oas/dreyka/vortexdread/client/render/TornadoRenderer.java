@@ -54,6 +54,9 @@ public class TornadoRenderer extends EntityRenderer<TornadoEntity, TornadoRender
     @Override
     public void submit(TornadoRenderState state, PoseStack poseStack, SubmitNodeCollector collector,
                        CameraRenderState camera) {
+        if (ShaderPack.drawingTheWorld()) {
+            return;
+        }
         collector.submitCustomGeometry(poseStack, VortexRenderTypes.funnel(), (pose, consumer) ->
                 FunnelPrism.emit(consumer, pose.pose(), state.coreRadius, state.funnelHeight,
                         state.windFraction, state.descent, state.groundLoad, state.tint, state.flash,

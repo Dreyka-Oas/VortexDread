@@ -5,7 +5,9 @@
   "mixins": [],
   "client": [
     "client.GameRendererAccess",
-    "client.CameraShakeMixin"
+    "client.CameraShakeMixin",
+    "client.LightningBoltRenderStateMixin",
+    "client.LightningBoltRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

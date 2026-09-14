@@ -25,6 +25,10 @@ import net.minecraft.world.phys.Vec3;
  * camera and the camera moves between ticks. A tick-old offset on a funnel two hundred blocks away is
  * a funnel that swims against the landscape whenever the player turns.
  *
+ * <p>Once per frame is only half of it: the storm inside that frame is taken at the same partial tick
+ * the entity renderer is drawing on. A frame written every sixteen milliseconds out of a position that
+ * only changes every fifty steps just as badly as one written per tick.
+ *
  * <p>Without a pack installed nothing reads this and the cost is one 8 by 4 upload a frame, which is
  * a few hundred bytes and does not touch the frame budget.
  */
@@ -40,8 +44,15 @@ public final class FunnelState {
      */
     public static final Identifier TEXTURE = VortexDread.id("textures/effect/funnel_state.png");
 
-    /** How many funnels a pack is told about. Past this the nearest ones win, which is all anyone sees. */
-    public static final int MAX_FUNNELS = 4;
+    /**
+     * How many funnels a pack is told about.
+     *
+     * <p>One, because a level holds one. The list below is still sorted by distance rather than
+     * taking whatever the level hands over first: a client that has both an entity and a packet for
+     * the same storm, or a packet left over from one that has just died, would otherwise be able to
+     * write the wrong one into the row the pack reads.
+     */
+    public static final int MAX_FUNNELS = 1;
 
     /** Fields per funnel, one texel each. */
     private static final int FIELDS = 8;
@@ -89,6 +100,9 @@ public final class FunnelState {
 
     private static void write() {
         Minecraft client = Minecraft.getInstance();
+        // The same fraction of a tick the entity renderers are drawing on, since the two have to agree
+        // on where the storm is or the shader's funnel and the mod's own prism sit a stride apart.
+        float partialTick = client.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         Vec3 camera = client.gameRenderer.getMainCamera().position();
         ensure(client);
         NativeImage pixels = state.getPixels();
@@ -105,7 +119,7 @@ public final class FunnelState {
         if (client.level != null) {
             for (var entity : client.level.entitiesForRendering()) {
                 if (entity instanceof TornadoEntity tornado) {
-                    found = offer(nearest, distances, found, StormDigest.of(tornado), camera);
+                    found = offer(nearest, distances, found, StormDigest.of(tornado, partialTick), camera);
                 }
             }
         }
@@ -168,10 +182,11 @@ public final class FunnelState {
      */
     static int insert(StormDigest[] nearest, double[] distances, int found,
             StormDigest storm, double distance) {
-        if (found == MAX_FUNNELS && distance >= distances[MAX_FUNNELS - 1]) {
+        int room = nearest.length;
+        if (found == room && distance >= distances[room - 1]) {
             return found;
         }
-        int at = Math.min(found, MAX_FUNNELS - 1);
+        int at = Math.min(found, room - 1);
         while (at > 0 && distances[at - 1] > distance) {
             nearest[at] = nearest[at - 1];
             distances[at] = distances[at - 1];
@@ -179,7 +194,7 @@ public final class FunnelState {
         }
         nearest[at] = storm;
         distances[at] = distance;
-        return Math.min(found + 1, MAX_FUNNELS);
+        return Math.min(found + 1, room);
     }
 
     /** What the player asked the funnel to cost, for whichever program ends up drawing it. */
