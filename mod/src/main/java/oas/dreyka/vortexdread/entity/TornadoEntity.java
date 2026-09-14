@@ -97,6 +97,8 @@ public class TornadoEntity extends Entity implements TornadoView {
     private static final float LOAD_RISE = 0.08f;
     private static final float LOAD_FALL = 0.02f;
 
+    private static boolean retiresOthers = true;
+
     private TornadoLifecycle lifecycle;
     private TornadoTrack track;
     private final DestructionSweep destruction = new DestructionSweep();
@@ -133,6 +135,7 @@ public class TornadoEntity extends Entity implements TornadoView {
         if (tornado == null) {
             return null;
         }
+        retire(level);
         int lifespan = lifespanTicks > 0
                 ? lifespanTicks
                 : TornadoConfig.lifespanMinTicks + level.random.nextInt(
@@ -154,6 +157,35 @@ public class TornadoEntity extends Entity implements TornadoView {
     /** Draws a strength from the real distribution and starts one. */
     public static TornadoEntity spawnRandom(ServerLevel level, double x, double z, double bias) {
         return spawn(level, x, z, RatingRoll.drawPeakWind(VortexRandom.of(level.random), bias));
+    }
+
+    /**
+     * Sends whatever is already turning on its way, since a level holds one tornado at a time.
+     *
+     * <p>Not a limit imposed to save work. Everything a player sees is drawn from one storm: the state a
+     * shader pack reads is a single row, the sky is held by one of them, and two funnels sharing a
+     * horizon drew one lowering stretched across both rather than two storms. Whoever asks for a new one
+     * is asking for this one, so the old one goes rather than the new one being refused.
+     */
+    private static void retire(ServerLevel level) {
+        if (!retiresOthers) {
+            return;
+        }
+        for (TornadoEntity turning : level.getEntities(VortexEntities.TORNADO, alive -> true)) {
+            TornadoLifeCallback.EVENT.invoker().onGone(level, turning);
+            turning.discard();
+        }
+    }
+
+    /**
+     * Lets several funnels stand in one level at once. Test seam, not a config knob.
+     *
+     * <p>A batch of tests runs in arenas half a million blocks apart and all of them in the same level,
+     * so one arena standing a funnel up takes down the funnel every other arena is measuring. Nothing a
+     * player can reach goes through here.
+     */
+    public static void shareTheLevel(boolean share) {
+        retiresOthers = !share;
     }
 
     @Override
