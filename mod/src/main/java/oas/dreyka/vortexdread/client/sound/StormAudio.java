@@ -21,6 +21,10 @@ import net.minecraft.client.Minecraft;
  * <p>A funnel past the audible range has its loops stopped rather than played at zero. An OpenAL source
  * held open for a storm nobody can hear is a source the rest of the game cannot use, and on a busy
  * server that is how a mod quietly eats the sound budget.
+ *
+ * <p>The wind bed is the exception and is held for as long as any storm exists, because its own reach is
+ * several times the roar's and it takes a minute to climb. Stopping and restarting it on a threshold
+ * would put a swell at the threshold instead of at the storm.
  */
 public final class StormAudio {
     private StormAudio() {
@@ -36,6 +40,9 @@ public final class StormAudio {
     private static final double WORTH_SAYING = 0.3;
 
     private static final Map<Integer, Voice> VOICES = new HashMap<>();
+
+    /** The one wind bed, held here so it survives between ticks and dies with the level. */
+    private static InflowBed bed;
 
     private static final class Voice {
         private final TornadoRoar rush;
@@ -71,15 +78,21 @@ public final class StormAudio {
     private static void tick(Minecraft client) {
         if (client.level == null) {
             VOICES.clear();
+            if (bed != null) {
+                bed.end();
+                bed = null;
+            }
             return;
         }
         long now = client.level.getGameTime();
         var camera = client.gameRenderer.getMainCamera().position();
 
+        boolean anyStorm = false;
         for (var entity : client.level.entitiesForRendering()) {
             if (!(entity instanceof TornadoEntity tornado)) {
                 continue;
             }
+            anyStorm = true;
             boolean close = tornado.distanceToSqr(camera.x, tornado.getY(), camera.z) < EARSHOT * EARSHOT;
             Voice voice = VOICES.get(tornado.getId());
             if (voice == null && close) {
@@ -87,6 +100,17 @@ public final class StormAudio {
             } else if (voice != null && !close) {
                 silence(tornado.getId());
             }
+        }
+
+        // The bed opens as soon as a storm exists anywhere in the level, whatever its distance, because
+        // its own reach is what decides whether it is audible and it needs the climb to be running
+        // before it is. It closes only when the last one is gone.
+        if (anyStorm && bed == null) {
+            bed = new InflowBed();
+            client.getSoundManager().play(bed);
+        } else if (!anyStorm && bed != null) {
+            bed.end();
+            bed = null;
         }
 
         for (Iterator<Map.Entry<Integer, Voice>> it = VOICES.entrySet().iterator(); it.hasNext(); ) {
@@ -141,9 +165,10 @@ public final class StormAudio {
         }
         voice.reportedAt = distance;
         voice.settleAt = now + SETTLE_TICKS;
-        VortexDread.LOGGER.info("[VortexDread] roar at {} blocks: rush {}, rumble {}",
+        VortexDread.LOGGER.info("[VortexDread] roar at {} blocks: rush {}, rumble {}, inflow {}",
                 Math.round(distance),
                 String.format(java.util.Locale.ROOT, "%.3f", voice.rush.gain()),
-                String.format(java.util.Locale.ROOT, "%.3f", voice.rumble.gain()));
+                String.format(java.util.Locale.ROOT, "%.3f", voice.rumble.gain()),
+                String.format(java.util.Locale.ROOT, "%.3f", bed == null ? 0.0f : bed.gain()));
     }
 }

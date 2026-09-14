@@ -12,12 +12,14 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -44,6 +46,15 @@ public class DebrisEntity extends Entity {
 
     /** Below this speed an impact is a bump rather than an injury, in blocks per second. */
     private static final double HARMLESS_SPEED = 12.0;
+
+    /** Below this a piece lands without being heard, in blocks per second. */
+    private static final double QUIET_LANDING = 9.0;
+
+    /** At this speed a landing is as loud as it gets, in blocks per second. */
+    private static final double LOUDEST_LANDING = 40.0;
+
+    /** How many of the pieces landing hard enough get a sound. The rest arrive silently. */
+    private static final float HEARD_SHARE = 0.25f;
 
     private BlockState state = net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState();
     private double terminalVelocity = 24.0;
@@ -107,12 +118,38 @@ public class DebrisEntity extends Entity {
             setDeltaMovement(before.x, before.y - DebrisMotion.GRAVITY / 20.0 / 20.0, before.z);
         }
 
+        // Kept from before the move, because a collision zeroes the axis it happened on and the speed a
+        // piece arrived at is the whole of what its landing sounds like.
+        double arriving = getDeltaMovement().length() * 20.0;
         move(MoverType.SELF, getDeltaMovement());
         strike(server);
 
         if (horizontalCollision || verticalCollision || onGround()) {
+            land(server, arriving);
             settle(server);
         }
+    }
+
+    /**
+     * The noise of a piece arriving.
+     *
+     * <p>The block's own break sound rather than one of the mod's. A stone slab hitting a field has to
+     * sound like stone and a fence post like wood, and there is no way to write that once for every
+     * block a storm can pick up, the ones other mods add included.
+     *
+     * <p>Only a fraction of the fast ones are heard. A wedge settles hundreds of pieces a second and the
+     * engine holds a few dozen sources at a time: play them all and the first thing evicted is the
+     * storm's own roar, which trades the sound the whole scene is built on for a rattle.
+     */
+    private void land(ServerLevel server, double speed) {
+        if (speed < QUIET_LANDING || state.isAir() || random.nextFloat() > HEARD_SHARE) {
+            return;
+        }
+        SoundType type = state.getSoundType();
+        float force = (float) Math.min(1.0, speed / LOUDEST_LANDING);
+        server.playSound(null, getX(), getY(), getZ(), type.getBreakSound(), SoundSource.WEATHER,
+                type.getVolume() * (0.4f + 0.9f * force),
+                type.getPitch() * (1.15f - 0.35f * force));
     }
 
     /** Hurts anything it passes through, hard enough to matter and only when it is moving. */

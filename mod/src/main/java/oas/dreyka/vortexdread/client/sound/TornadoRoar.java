@@ -41,6 +41,9 @@ public class TornadoRoar extends AbstractTickableSoundInstance {
     /** Loudest either loop is allowed to be, before the player's own weather slider. */
     private static final float CEILING = 1.6f;
 
+    /** What an EF5 asks for standing in its core, before distance takes any of it away. */
+    private static final float HEADROOM = 1.7f;
+
     private final TornadoEntity tornado;
     private final boolean broadband;
     private float gain;
@@ -83,7 +86,11 @@ public class TornadoRoar extends AbstractTickableSoundInstance {
         float distance = distanceToColumn();
         float wanted = distance >= RANGE ? 0.0f : strength() * spreading(distance) * share(distance);
         gain += (wanted - gain) * GLIDE;
-        volume = Math.min(CEILING, gain);
+        // Clamped here rather than only on the volume. Letting the level run past the ceiling means a
+        // player who walks out of the core hears no change for the several seconds the glide needs to
+        // come back down through the headroom, which is the one place the sound has to be alive.
+        gain = Math.min(CEILING, gain);
+        volume = gain;
 
         // A bigger funnel sounds lower, which is the same reason a big bell does. The shift is small on
         // purpose: pitched far enough to hear, never far enough to sound like a slowed-down recording.
@@ -128,16 +135,21 @@ public class TornadoRoar extends AbstractTickableSoundInstance {
     /**
      * Acoustic output against the gust, steeper than linear.
      *
-     * <p>The power a turbulent flow radiates climbs far faster than its speed does, so an EF5 is not
-     * one grade louder than an EF4, it is another thing entirely. The cube root at the end is the ear,
+     * <p>The power a turbulent flow radiates climbs far faster than its speed does, so an EF4 and an EF5
+     * are two different things rather than two settings of one. The cube root at the end is the ear,
      * which hears power on a curve of its own.
+     *
+     * <p>Measured against the top of the scale, so the loudest storm the game makes lands just under the
+     * ceiling and everything weaker has room below it. Against the bottom of the scale an EF5 came out
+     * at twice the ceiling, and everything from the core out to a hundred and fifty blocks was pinned
+     * at the same volume: no approach, no retreat, one flat wall of noise.
      */
     private float strength() {
-        float ratio = tornado.wind() / EfScale.EF0.minWind();
+        float ratio = tornado.wind() / EfScale.EF5.minWind();
         if (ratio <= 0.0f) {
             return 0.0f;
         }
-        return (float) Math.cbrt(ratio * ratio * ratio * ratio) * tornado.descent();
+        return (float) Math.cbrt(ratio * ratio * ratio * ratio) * HEADROOM * tornado.descent();
     }
 
     /** Inverse distance, held flat inside the core so the middle of it is not infinitely loud. */

@@ -16,5 +16,14 @@
         "stream": false
       }
     ]
+  },
+  "storm_inflow": {
+    "category": "weather",
+    "sounds": [
+      {
+        "name": "vortexdread:storm_inflow",
+        "stream": false
+      }
+    ]
   }
 }
