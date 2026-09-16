@@ -34,12 +34,19 @@ public final class FunnelLightning {
     private static final double MIN_HEIGHT_FRACTION = 0.25;
     private static final double MAX_HEIGHT_FRACTION = 0.95;
 
+    /** How much of the ground stroke rate a funnel adds around itself, on top of the storm's own. */
+    private static final double GROUND_STROKE_SHARE = 1.6;
+
+    /** Innermost and outermost ring a ground stroke lands on, as a multiple of the funnel's radius. */
+    private static final double GROUND_STROKE_NEAR = 2.0;
+    private static final double GROUND_STROKE_FAR = 9.0;
+
     public static void tick(ServerLevel level, TornadoEntity tornado) {
         float flash = tornado.flash();
         if (flash > 0.0f) {
             tornado.setFlash(Math.max(0.0f, flash - FLASH_DECAY));
         }
-        if (!StormConfig.extraLightning || StormConfig.funnelFlashesPerMinute <= 0.0) {
+        if (!StormConfig.extraLightning) {
             return;
         }
 
@@ -47,11 +54,36 @@ public final class FunnelLightning {
         if (intensity < ACTIVITY_FLOOR) {
             return;
         }
-        double chance = StormConfig.funnelFlashesPerMinute / (60.0 * 20.0) * intensity;
-        if (level.random.nextDouble() >= chance) {
-            return;
+        if (StormConfig.funnelFlashesPerMinute > 0) {
+            double chance = StormConfig.funnelFlashesPerMinute / (60.0 * 20.0) * intensity;
+            if (level.random.nextDouble() < chance) {
+                strike(level, tornado);
+            }
         }
-        strike(level, tornado);
+        if (CloudLightning.groundStruck()) {
+            double chance = StormConfig.groundStrokesPerMinute * GROUND_STROKE_SHARE
+                    / (60.0 * 20.0) * intensity;
+            if (level.random.nextDouble() < chance) {
+                strikeGround(level, tornado);
+            }
+        }
+    }
+
+    /**
+     * Puts one stroke on the ground in the ring around the funnel.
+     *
+     * <p>The updraft is where the charge is, so the strokes cluster near it: a tornado on the ground is
+     * a place where the sky is coming down all over, not only in the one column that is turning. Kept
+     * outside the funnel's own radius, since inside it the channel would be buried in the column.
+     */
+    private static void strikeGround(ServerLevel level, TornadoEntity tornado) {
+        VortexParameters parameters = tornado.parameters();
+        double radius = Math.max(8.0, parameters.funnelRadiusAt(parameters.groundY()));
+        double reach = radius * (GROUND_STROKE_NEAR
+                + level.random.nextDouble() * (GROUND_STROKE_FAR - GROUND_STROKE_NEAR));
+        double angle = level.random.nextDouble() * Math.PI * 2.0;
+        CloudLightning.strikeGround(level, parameters.centerX() + reach * Math.cos(angle),
+                parameters.centerZ() + reach * Math.sin(angle));
     }
 
     /** Puts one bolt somewhere on the funnel wall and lights the volume from there. */

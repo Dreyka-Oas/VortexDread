@@ -3,11 +3,13 @@ package oas.dreyka.vortexdread.storm;
 import oas.dreyka.vortexdread.config.domain.StormConfig;
 import oas.dreyka.vortexdread.config.domain.TornadoConfig;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * The lightning inside the cloud deck.
@@ -35,6 +37,12 @@ public final class CloudLightning {
     /** Closest a flash is placed, so the deck never lights up directly overhead every time. */
     private static final double MINIMUM_SPREAD = 48.0;
 
+    /** Closest a ground stroke lands to a player, in blocks, so none of them comes down on a head. */
+    private static final double STROKE_KEEP_AWAY = 72.0;
+
+    /** How far out a ground stroke may land. Past this the channel is a scratch on the horizon. */
+    private static final double STROKE_SPREAD = 340.0;
+
     /**
      * Whether the deck is allowed to light itself at all.
      *
@@ -47,20 +55,53 @@ public final class CloudLightning {
                 && StormConfig.cloudFlashesPerMinute > 0;
     }
 
+    /** Whether strokes that come down to the ground are drawn. */
+    public static boolean groundStruck() {
+        return StormConfig.rebuildStorms && StormConfig.extraLightning
+                && StormConfig.groundStrokesPerMinute > 0;
+    }
+
     /** One tick of the cloud deck's own lightning. */
     public static void tick(ServerLevel level) {
-        if (!deckLit()) {
+        if (!StormConfig.rebuildStorms || !StormConfig.extraLightning) {
             return;
         }
         if (!level.isThundering() || level.players().isEmpty()) {
             return;
         }
-        double chance = StormConfig.cloudFlashesPerMinute / (60.0 * 20.0);
-        if (level.random.nextDouble() >= chance) {
+        ServerPlayer witness = level.players().get(level.random.nextInt(level.players().size()));
+        if (deckLit() && level.random.nextDouble() < StormConfig.cloudFlashesPerMinute / (60.0 * 20.0)) {
+            flashNear(level, witness.getX(), witness.getY(), witness.getZ());
+        }
+        if (groundStruck()
+                && level.random.nextDouble() < StormConfig.groundStrokesPerMinute / (60.0 * 20.0)) {
+            strikeGroundNear(level, witness.getX(), witness.getZ());
+        }
+    }
+
+    /**
+     * Puts one cloud to ground stroke on the terrain around a point, with its channel drawn.
+     *
+     * <p>Kept clear of the point it is given rather than centred on it, because the one thing worse
+     * than a storm with no visible strokes is a storm that drops them on the player's shoulders. Still
+     * visual-only: the light and the thunder are the whole effect, and the risk a player takes standing
+     * in the rain stays whatever vanilla decided it was.
+     */
+    public static void strikeGroundNear(ServerLevel level, double x, double z) {
+        double angle = level.random.nextDouble() * Math.PI * 2.0;
+        double distance = STROKE_KEEP_AWAY
+                + level.random.nextDouble() * (STROKE_SPREAD - STROKE_KEEP_AWAY);
+        strikeGround(level, x + distance * Math.cos(angle), z + distance * Math.sin(angle));
+    }
+
+    /** Puts one cloud to ground stroke on the terrain at an exact column. */
+    public static void strikeGround(ServerLevel level, double x, double z) {
+        BlockPos column = BlockPos.containing(x, level.getMinY(), z);
+        if (!level.isLoaded(column)) {
             return;
         }
-        ServerPlayer witness = level.players().get(level.random.nextInt(level.players().size()));
-        flashNear(level, witness.getX(), witness.getY(), witness.getZ());
+        BlockPos ground = level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, column);
+        flashAt(level, x, ground.getY(), z);
     }
 
     /** Puts one intra-cloud flash somewhere in the deck above a point on the ground. */

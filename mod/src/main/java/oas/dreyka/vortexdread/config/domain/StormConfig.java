@@ -46,6 +46,16 @@ public final class StormConfig {
     /** Bolts fired inside the funnel itself per minute once a tornado is on the ground. */
     public static int funnelFlashesPerMinute = 9;
 
+    /**
+     * Strokes that come down to the ground per minute, with the channel drawn.
+     *
+     * <p>Most lightning stays in the cloud and that is what the flashes above are, but a supercell puts
+     * plenty of it on the ground too, and a storm where nothing is ever seen to come down does not read
+     * as a storm at all. These carry no fire and no damage: what vanilla does to a player standing in
+     * the open is left exactly as vanilla does it, at vanilla's own rate.
+     */
+    public static int groundStrokesPerMinute = 8;
+
     /** Whether those extra bolts are fired at all. Off leaves only the strikes vanilla would make. */
     public static boolean extraLightning = true;
 }

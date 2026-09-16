@@ -113,18 +113,25 @@ public final class StormDirector {
                 Math.round(mesocyclone.x()), Math.round(mesocyclone.z()), level.dimension().identifier());
     }
 
-    /** Lights the rotating column from inside, harder as it matures. */
+    /** Lights the rotating column from inside, harder as it matures, and puts some of it on the ground. */
     private void lightTheColumn(ServerLevel level) {
-        if (!CloudLightning.deckLit()) {
-            return;
+        if (CloudLightning.deckLit()
+                && level.random.nextDouble()
+                        < StormConfig.cloudFlashesPerMinute / (60.0 * 20.0) * mesocyclone.maturity()) {
+            CloudLightning.flashNear(level, mesocyclone.x() + wander(level), level.getSeaLevel(),
+                    mesocyclone.z() + wander(level));
         }
-        double chance = StormConfig.cloudFlashesPerMinute / (60.0 * 20.0) * mesocyclone.maturity();
-        if (level.random.nextDouble() >= chance) {
-            return;
+        if (CloudLightning.groundStruck()
+                && level.random.nextDouble()
+                        < StormConfig.groundStrokesPerMinute / (60.0 * 20.0) * mesocyclone.maturity()) {
+            CloudLightning.strikeGround(level, mesocyclone.x() + wander(level),
+                    mesocyclone.z() + wander(level));
         }
-        double dx = mesocyclone.offsetAt(level.random.nextDouble(), level.random.nextDouble());
-        double dz = mesocyclone.offsetAt(level.random.nextDouble(), level.random.nextDouble());
-        CloudLightning.flashNear(level, mesocyclone.x() + dx, level.getSeaLevel(), mesocyclone.z() + dz);
+    }
+
+    /** One offset inside the rotating column, in blocks from its centre. */
+    private double wander(ServerLevel level) {
+        return mesocyclone.offsetAt(level.random.nextDouble(), level.random.nextDouble());
     }
 
     /** Rolls for a funnel reaching the ground, and starts one if it does. */

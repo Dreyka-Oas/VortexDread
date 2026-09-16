@@ -32,7 +32,7 @@ not redistributed here, the script reads your own copy and writes a second one b
 The heavy arithmetic goes to the graphics card through OpenCL, on a dedicated server exactly as on a
 client, and falls back to the processor with identical results when no device answers.
 
-Everything is configurable in `config/oas/vortexdread.json`, server side, 42 options: how often storms
+Everything is configurable in `config/oas/vortexdread.json`, server side, 44 options: how often storms
 form, how strong they get, how fast they travel, what they are allowed to break, how loud they are and
 how much of the screen they take over. A server owner who wants tornadoes that never break a block gets
 that from one line.

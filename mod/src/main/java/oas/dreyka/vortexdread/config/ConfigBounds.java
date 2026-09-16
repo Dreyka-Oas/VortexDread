@@ -33,6 +33,7 @@ public final class ConfigBounds {
         m.put("warningRadius", new Range(32, 4096));
         m.put("cloudFlashesPerMinute", new Range(0, 600));
         m.put("funnelFlashesPerMinute", new Range(0, 600));
+        m.put("groundStrokesPerMinute", new Range(0, 600));
 
         m.put("coreRadiusAtEf0", new Range(1.0, 64.0));
         m.put("radiusGrowthExponent", new Range(0.5, 4.0));
