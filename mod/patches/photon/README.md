@@ -26,6 +26,16 @@ mass, the base is let down to the floor of the layer under the funnel and scallo
 not a flat table, and the ring outside is thinned so the mass in the middle reads as a mass. The deck
 turns, slowly, faster toward the middle.
 
+**The storm is several decks, not one deck made thicker.** What makes a photograph of a supercell read
+as enormous is that you can count the levels in it: the hard flat base of the updraft, the boiling mass
+above it, the anvil spread across the whole sky where the tower hit the tropopause and could not rise
+any further, and the cirrus torn off the top of that and carried downwind. Photon already marches a
+second volumetric layer four hundred units over the first and already draws planar cirrus over both;
+away from a storm its weather leaves them nearly empty, which is right for an ordinary day. The patch
+fills them while a storm holds the sky. The anvil then pays for itself twice, once as the mass a viewer
+reads the height of the storm against, and once as the thing standing between the sun and the deck the
+funnel is cut out of, which is what darkens that deck without a single number being lowered anywhere.
+
 **The storm says what its own weather is.** The game's rain drives Photon's humidity to one and its
 cloud coverage with it, and a layer already at full coverage has nothing left for any of the above to
 add to. Left alone the storm builds beautifully while the rain comes on and then dissolves into a flat
@@ -40,10 +50,13 @@ funnel stays readable to the ground and the land under the base loses its colour
 **Lightning stops being an exposure change.** Photon has one flash factor and adds it to every cloud
 pixel at the same strength, so a stroke on the horizon brightens the cloud above your head by exactly
 as much as the cloud it is inside. Iris passes the position of the bolt in `lightningBoltPosition`, and
-the patch feeds that into the cumulus march as a point source: inverse square from the channel, and the
-light still has to climb out through whatever sits above the sample before anyone sees it. A storm
-lights up from the inside, in the part of it the stroke went through. That is what makes the mod's own
-internal flashes work, the visual-only bolts it drops inside the funnel and inside the mesocyclone.
+the patch feeds that into the cumulus march as a source with a shape: a channel running up from the
+bolt rather than a point at it, a narrow lobe for the cloud the stroke is buried in and a far wider one
+for the mass around it, since that mass is itself scattering the light and becomes a lamp in its own
+right. So the storm lights up over its whole width with the part the stroke went through brightest, and
+a strike that comes down to the ground lights the cloud it came out of rather than only the field it
+landed in. The light still has to climb out through whatever sits above the sample before anyone sees
+it, which is what gives the lit region an edge.
 
 **The turning part of the sky is not reused between frames.** Photon rebuilds three cloud pixels in
 four out of the frames before them, on the assumption that a cloud only ever slides with the wind. A

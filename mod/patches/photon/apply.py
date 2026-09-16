@@ -384,7 +384,8 @@ EDITS = (
         (
             "shaders/include/weather/clouds.glsl",
             '#include "/include/weather/core.glsl"',
-            '#include "/include/weather/core.glsl"\n#include "/include/vortexdread/sky.glsl"',
+            '#include "/include/weather/core.glsl"\n#include "/include/vortexdread/sky.glsl"\n'
+            '#include "/include/vortexdread/layers.glsl"',
             1,
         ),
         (
@@ -394,6 +395,16 @@ EDITS = (
             "CloudsParameters get_clouds_parameters(Weather weather) {\n"
             "    weather = vortexdread_storm_sky(weather);\n"
             "    CloudsParameters params;",
+            1,
+        ),
+        # A storm is several decks at several heights, not one deck made thicker, and the pack already
+        # marches a second volumetric layer four hundred units over the first. Away from a storm the
+        # weather leaves that one nearly empty, which is right for an ordinary day. Filled, it is the
+        # anvil, and what stands between the sun and the deck the funnel is cut out of.
+        (
+            "shaders/include/weather/clouds.glsl",
+            "        ));\n\n    return params;\n}",
+            "        ));\n\n    return vortexdread_storm_layers(params);\n}",
             1,
         ),
         # The haze under the storm is the other half of the same lie, and it is the one the funnel
@@ -533,6 +544,7 @@ COPIES = [
     ("shaders/include/vortexdread/pall.glsl", "shaders/include/vortexdread/pall.glsl"),
     ("shaders/include/vortexdread/sky.glsl", "shaders/include/vortexdread/sky.glsl"),
     ("shaders/include/vortexdread/haze.glsl", "shaders/include/vortexdread/haze.glsl"),
+    ("shaders/include/vortexdread/layers.glsl", "shaders/include/vortexdread/layers.glsl"),
     ("shaders/include/vortexdread/exposure.glsl", "shaders/include/vortexdread/exposure.glsl"),
 ]
 
