@@ -21,13 +21,14 @@
 // The pack's own flash factor, which is what a bolt does to the whole sky here.
 #include "/include/misc/lightning_flash.glsl"
 
-// How far the aperture closes while a bolt is lit. The pack brightens the entire sky by a fixed factor
-// and its exposure is a running average that cannot follow a tenth of a second, so the frame clips to
-// flat white and every silhouette in it goes with it. Nobody standing under a storm sees white: what
-// they see is the mass lighting up from inside, and stopping down for the length of the flash is what
-// puts that back. Only while a storm of the mod's own is near, so an ordinary night keeps the pack's
-// behaviour.
-const float vortexdread_flash_stop = 0.88;
+// How far the aperture closes while a bolt is lit. Small, and it has to stay small: this is spent
+// directly on the frame with no averaging in front of it, so whatever is set here is what the picture
+// is multiplied by for the length of the stroke. The flat term it was written against is already down
+// to a tenth of what the pack ships, since the light now comes out of the cloud volume where the bolt
+// actually is, and what is left to counter is an afterglow rather than a white-out. Enough to read as
+// an eye narrowing, and nowhere near enough to take the world with it. Only while a storm of the mod's
+// own is near, so an ordinary night keeps the pack's behaviour.
+const float vortexdread_flash_stop = 0.42;
 
 const int vortexdread_exposure_rows = 4;
 const float vortexdread_exposure_reach = 2048.0;

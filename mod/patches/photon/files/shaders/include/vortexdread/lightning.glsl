@@ -23,11 +23,25 @@
 uniform vec4 lightningBoltPosition; // xyz relative to the camera, w set while a bolt is rendering
 
 // How far the channel throws light, in blocks, before the falloff has halved it.
-const float vortexdread_lightning_reach = 220.0;
+const float vortexdread_lightning_reach = 260.0;
+
+// A second, far wider lobe and how much of the channel's output goes into it. A stroke is buried in a
+// cloud that scatters it, so what leaves the lit region is not one point source falling off as the
+// inverse square: the mass around it turns into a lamp in its own right, and a storm several hundred
+// blocks across lights up over its whole width with the part the stroke went through brightest. One
+// narrow lobe alone puts a bright patch on one side of the deck and leaves the rest of it dark.
+const float vortexdread_lightning_spill = 900.0;
+const float vortexdread_lightning_spill_gain = 0.12;
+
+// How far up the channel is taken to run from the bolt's own position, in blocks. Lightning is a line,
+// not a point, and the difference shows most on a stroke that comes down to the ground: its entity sits
+// on the terrain, two hundred blocks under the cloud it came out of, so a point source there would
+// light the field and leave the storm above it untouched.
+const float vortexdread_lightning_channel = 420.0;
 
 // Radiance of the channel. Large, because it is divided by the inverse square almost immediately and
 // because what it has to compete with is an overcast sky at noon.
-const vec3 vortexdread_lightning_color = vec3(0.78, 0.85, 1.0) * 190.0;
+const vec3 vortexdread_lightning_color = vec3(0.78, 0.85, 1.0) * 150.0;
 
 /**
  * How much light one step of the march receives from the stroke.
@@ -47,15 +61,24 @@ vec3 vortexdread_lightning_gain(
     }
 
     vec3 bolt_pos = air_viewer_pos + lightningBoltPosition.xyz * CLOUDS_SCALE;
-    float to_bolt = distance(cloud_pos, bolt_pos) / CLOUDS_SCALE;
+
+    // The nearest point of the channel rather than the bolt's own position. Up in the curved frame the
+    // cloud functions work in is the direction away from the planet centre, which is the origin.
+    vec3 up = normalize(bolt_pos);
+    float along = clamp(dot(cloud_pos - bolt_pos, up),
+                        0.0, vortexdread_lightning_channel * CLOUDS_SCALE);
+    float to_bolt = distance(cloud_pos, bolt_pos + up * along) / CLOUDS_SCALE;
 
     // Inverse square, with a core the width of the channel's own glow so the term stays finite for a
-    // sample sitting on top of the stroke.
-    float falloff = 1.0 / (1.0 + (to_bolt * to_bolt) / (vortexdread_lightning_reach * vortexdread_lightning_reach));
+    // sample sitting on top of the stroke, plus the wide lobe that carries the rest of the storm.
+    float squared = to_bolt * to_bolt;
+    float falloff = 1.0 / (1.0 + squared / (vortexdread_lightning_reach * vortexdread_lightning_reach))
+        + vortexdread_lightning_spill_gain
+            / (1.0 + squared / (vortexdread_lightning_spill * vortexdread_lightning_spill));
 
     // The light still has to leave the cloud to be seen, and it leaves upward and sideways through
     // whatever is above this sample. That is what turns a flash into a lit region with an edge.
-    float escape = exp(-sky_optical_depth * extinction_coeff * 0.4);
+    float escape = exp(-sky_optical_depth * extinction_coeff * 0.3);
 
     // The same scattering integral Photon uses for its own terms, so this one is in the same units.
     float scattered = 1.0 - step_transmittance;

@@ -21,12 +21,14 @@
 #include "/include/fog/overworld/parameters.glsl"
 #include "/include/vortexdread/sky.glsl"
 
-// What the haze gives back of what it takes, against the half the pack's rain haze returns.
-const float vortexdread_haze_albedo = 0.18;
+// What the haze gives back of what it takes, against the half the pack's rain haze returns. A third
+// rather than a fifth: under a fifth the land past a few hundred blocks stops being dim and starts
+// being absent, and a player who cannot see where they are running is not being given atmosphere.
+const float vortexdread_haze_albedo = 0.34;
 
 // How much more of the view the haze takes out, and how much of the blue sheen is left in it.
-const float vortexdread_haze_reach = 1.25;
-const float vortexdread_haze_sheen = 0.55;
+const float vortexdread_haze_reach = 1.10;
+const float vortexdread_haze_sheen = 0.60;
 
 /** The air the storm leaves behind it, from the air the weather asked for. */
 OverworldFogParameters vortexdread_storm_haze(OverworldFogParameters params) {
