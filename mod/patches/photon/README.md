@@ -47,6 +47,16 @@ kilometre of rain haze, and Photon's rain haze is bright. A dark funnel through 
 half its height down. Under the storm the same air takes more light out and gives less back, so the
 funnel stays readable to the ground and the land under the base loses its colour.
 
+**And it is hazed for where it stands, not for where the layer starts.** Photon measures the air in
+front of a cloud, and the depth it tests that cloud against, from the point the ray enters the cumulus
+shell. That is the right point for a cloud, which is in the shell. A funnel is not: it hangs under the
+shell and stands next to the player, and on a ray pointed near the horizon the entry point is
+kilometres away. So the column was handed a horizon's worth of haze and came back the exact colour of
+the sky behind it, dense in the march and see-through on screen, holding its contrast high up and
+losing all of it near the ground. Both are anchored on the column's own distance instead, weighted by
+how much of the stopping on that ray the column did, so a ray that only clips its edge still gets the
+layer's perspective. This is the one correction in the patch that would be worth having upstream.
+
 **Lightning stops being an exposure change.** Photon has one flash factor and adds it to every cloud
 pixel at the same strength, so a stroke on the horizon brightens the cloud above your head by exactly
 as much as the cloud it is inside. Iris passes the position of the bolt in `lightningBoltPosition`, and
