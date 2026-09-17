@@ -28,7 +28,7 @@
 // actually is, and what is left to counter is an afterglow rather than a white-out. Enough to read as
 // an eye narrowing, and nowhere near enough to take the world with it. Only while a storm of the mod's
 // own is near, so an ordinary night keeps the pack's behaviour.
-const float vortexdread_flash_stop = 0.42;
+const float vortexdread_flash_stop = 0.20;
 
 const int vortexdread_exposure_rows = 4;
 const float vortexdread_exposure_reach = 2048.0;

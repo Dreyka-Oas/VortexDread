@@ -99,8 +99,14 @@ const float vortexdread_tatter = 0.05;
 // through the storm, and that is why a photographed one is darker than the cloud it hangs from however
 // bright the day is. The light march does find that depth, but most of what lights a thick cloud here
 // is the multiple scattering tail, and the tail is shadowed by almost nothing on purpose.
+// Spent over the whole drop rather than at one end of it, because that gradient is what says the thing
+// is standing in the air: a column of one brightness top to bottom is a cut-out, whatever shade it is.
 const float vortexdread_gloom_high = 0.70;
-const float vortexdread_gloom_low = 0.22;
+// The foot, and it has a floor under it that is not about realism. Past here the column gives back so
+// little that the composite falls through to its own sky term and the pack's metering opens on a frame
+// with a hole in it: measured against the sky beside it the funnel comes out paler at a twentieth than
+// it does at an eighth, which is the opposite of what asking for less light is supposed to buy.
+const float vortexdread_gloom_low = 0.12;
 
 // The same debt, owed by the storm's own base rather than by the funnel under it.
 //
@@ -435,7 +441,12 @@ float vortexdread_warp(inout vec3 pos, inout float r) {
     // nothing below it, so the bottom of the span has to be cut rather than faded over the whole length.
     // Cut on a torn ring rather than a level, and turned with the vortex, because the tip of a funnel is
     // the one part of it that is never flat and never still.
-    float tip = 1.0 - vortexdread_descent
+    //
+    // The tear straddles the contact rather than sitting above it. Added to a fully descended column it
+    // takes the cut up to a seventh of the drop, which on a two hundred block base is a funnel ending
+    // thirty blocks in the air: from any distance that is a shape hanging in the sky, and the one thing
+    // everyone knows about a tornado is that it is touching the ground.
+    float tip = (1.0 + vortexdread_tatter) * (1.0 - vortexdread_descent) - vortexdread_tatter
         + vortexdread_tatter * (sin(around * 3.0 + frameTimeCounter * 0.9)
             + 0.55 * sin(around * 7.0 - frameTimeCounter * 1.7));
     float reached = smoothstep(tip - 0.06, tip + 0.06, h);

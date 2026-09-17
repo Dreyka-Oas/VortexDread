@@ -231,6 +231,90 @@ def deck_edits(path: str) -> list:
         ),
         (
             path,
+            "    float distance_sum = 0.0;\n"
+            "    float distance_weight_sum = 0.0;",
+            "    float distance_sum = 0.0;\n"
+            "    float distance_weight_sum = 0.0;\n"
+            "\n"
+            "    // Vortex Dread: how much of this ray the column stopped, and where it started doing it\n"
+            "    float vortexdread_column_extinct = 0.0;\n"
+            "    float vortexdread_deck_extinct = 0.0;\n"
+            "    float vortexdread_column_near = -1.0;",
+            1,
+        ),
+        (
+            path,
+            "        // Update distance to cloud\n"
+            "        distance_sum += distance_to_sample * density;",
+            "        if (vortexdread_in_column) {\n"
+            "            vortexdread_column_extinct += step_optical_depth;\n"
+            "            if (vortexdread_column_near < 0.0) {\n"
+            "                vortexdread_column_near = distance(air_viewer_pos, ray_pos);\n"
+            "            }\n"
+            "        } else {\n"
+            "            vortexdread_deck_extinct += step_optical_depth;\n"
+            "        }\n"
+            "\n"
+            "        // Update distance to cloud\n"
+            "        distance_sum += distance_to_sample * density;",
+            1,
+        ),
+        # A funnel stands where it stands, not where the slab holding it starts.
+        #
+        # Both the air painted in front of a cloud and the depth the composite tests it against are
+        # measured from the point the ray enters the cumulus shell. On a ray pointed near the horizon
+        # that point is kilometres out, so a column sixty blocks away is covered with a horizon's worth
+        # of haze and comes back the colour of the sky behind it. Nothing is missing from the march: the
+        # shape is there and it is opaque, and then it is painted over. Anchored on the column's own
+        # distance in proportion to how much of the stopping on this ray the column did, so a ray that
+        # only grazes it keeps the layer's perspective.
+        (
+            path,
+            "    clouds_scattering = clouds_aerial_perspective(\n"
+            "        clouds_scattering,\n"
+            "        clouds_transmittance,\n"
+            "        air_viewer_pos,\n"
+            "        ray_origin,\n"
+            "        ray_dir,\n"
+            "        clear_sky\n"
+            "    );\n"
+            "\n"
+            "    float apparent_distance = (distance_weight_sum == 0.0)\n"
+            "        ? 1e6\n"
+            "        : (distance_sum / distance_weight_sum) +\n"
+            "            distance(air_viewer_pos, ray_origin);",
+            "    float vortexdread_stopped =\n"
+            "        vortexdread_column_extinct + vortexdread_deck_extinct;\n"
+            "    float vortexdread_share = vortexdread_stopped > 0.0\n"
+            "        ? vortexdread_column_extinct / vortexdread_stopped\n"
+            "        : 0.0;\n"
+            "    vec3 vortexdread_anchor = vortexdread_column_near < 0.0\n"
+            "        ? ray_origin\n"
+            "        : mix(ray_origin,\n"
+            "              air_viewer_pos + ray_dir * vortexdread_column_near,\n"
+            "              vortexdread_share);\n"
+            "\n"
+            "    clouds_scattering = clouds_aerial_perspective(\n"
+            "        clouds_scattering,\n"
+            "        clouds_transmittance,\n"
+            "        air_viewer_pos,\n"
+            "        vortexdread_anchor,\n"
+            "        ray_dir,\n"
+            "        clear_sky\n"
+            "    );\n"
+            "\n"
+            "    float apparent_distance = (distance_weight_sum == 0.0)\n"
+            "        ? 1e6\n"
+            "        : (distance_sum / distance_weight_sum) +\n"
+            "            distance(air_viewer_pos, ray_origin);\n"
+            "    if (vortexdread_column_near >= 0.0) {\n"
+            "        apparent_distance = mix(\n"
+            "            apparent_distance, vortexdread_column_near, vortexdread_share);\n"
+            "    }",
+            1,
+        ),
+        (
+            path,
             "        float step_optical_depth =\n"
             "            density * clouds_params.l0_extinction_coeff * step_length;",
             "        float step_optical_depth =\n"
@@ -340,14 +424,18 @@ EDITS = (
             "  #define CLOUDS_CUMULUS_THICKNESS 0.60 //",
             1,
         ),
-        # What is left of the flat term is the afterglow, which is a real thing: the sky stays lit for
-        # a moment after the channel is gone. What it stops being is the whole effect.
+        # The flat term is added to every cloud pixel on screen at one strength, whatever it is made
+        # of and wherever the stroke was, and the Iris uniform behind it rises for any bolt anywhere in
+        # the dimension. So a discharge inside one storm brightens the fair weather cumulus sitting on
+        # the horizon by the same amount, and a sky in which every cloud in sight flickers together is
+        # the one thing a real storm never looks like. Almost all of it is gone: what remains is a trace
+        # of the afterglow, which is real, the sky staying lit for a moment after the channel is gone.
         (
             "shaders/include/sky/clouds/sampling.glsl",
             "        result.xyz += LIGHTNING_FLASH_UNIFORM * lightning_flash_intensity *\n"
             "            ambient_scattering;",
             "        result.xyz += LIGHTNING_FLASH_UNIFORM * lightning_flash_intensity *\n"
-            "            ambient_scattering * 0.12; // the rest is applied in the volume now",
+            "            ambient_scattering * 0.03; // the rest is applied in the volume now",
             1,
         ),
         # Same reason as the layer above: the sky picks up the afterglow, the cloud the bolt is
@@ -357,7 +445,7 @@ EDITS = (
             "    result.scattering.rgb += LIGHTNING_FLASH_UNIFORM *\n"
             "        lightning_flash_intensity * result.scattering.a;",
             "    result.scattering.rgb += LIGHTNING_FLASH_UNIFORM *\n"
-            "        lightning_flash_intensity * result.scattering.a * 0.08;",
+            "        lightning_flash_intensity * result.scattering.a * 0.02;",
             1,
         ),
         # The clouds, refreshed four times as often and at twice the resolution.
@@ -481,6 +569,22 @@ EDITS = (
             "        texelFetch(noisetex, ivec2(gl_FragCoord.xy) & 511, 0).b\n"
             "    );\n\n"
             "    // Blend fog\n",
+            1,
+        ),
+        # The first frame in a world, which the pack spends on a black screen.
+        #
+        # The running average starts from whatever sits in the alpha of colortex5, and on a fresh world
+        # that buffer is cleared, so it starts from zero. Zero is not a NaN and not an infinity, so the
+        # guard below lets it through, and the frame is the target exposure blended most of the way
+        # toward nothing. What a player sees is the game going black on join and coming back over a
+        # second or so, resolving unevenly because the temporal passes behind it are refilling at the
+        # same time. Nothing to do with the storm, and it happens to anyone running the pack, but a mod
+        # whose whole subject is a dark sky cannot ship a black screen and call it someone else's.
+        (
+            "shaders/program/c4_taa_exposure.vsh",
+            "    if (isnan(previous_exposure) || isinf(previous_exposure)) {",
+            "    if (isnan(previous_exposure) || isinf(previous_exposure) ||\n"
+            "        previous_exposure <= 0.0) { // a cleared buffer is none of the first two",
             1,
         ),
         # The aperture. Photon reads the frame it was handed and opens up until the median lands where
