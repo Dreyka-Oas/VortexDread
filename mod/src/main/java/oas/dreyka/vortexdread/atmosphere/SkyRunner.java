@@ -6,6 +6,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -21,8 +22,8 @@ import java.util.function.Supplier;
  * and it goes to the same thread anyway rather than being a second code path nobody exercises.
  *
  * <p>Nothing here knows about Minecraft. It counts ticks handed to it and steps when enough have gone by,
- * which is what makes the pace reproducible: a client replaying from the same seed reaches the same step at
- * the same tick, and two machines agree without exchanging anything.
+ * which is what keeps the cadence a number rather than a wall clock: the pace holds whether the sky is on
+ * a card or on a processor, and the same count means the same thing on a server that is running behind.
  */
 public final class SkyRunner implements AutoCloseable {
 
@@ -31,27 +32,38 @@ public final class SkyRunner implements AutoCloseable {
 
     private final ExecutorService worker;
     private final int ticksPerStep;
+    private final Consumer<SkySnapshot> afterStep;
     private final AtomicReference<String> unreadNotice = new AtomicReference<>();
+    private final SkyFeed feed = new SkyFeed();
 
     private volatile SkySolver solver;
-    private volatile SkySnapshot current;
-    private volatile SkySnapshot previous;
     private Future<?> inFlight;
     private long ticks;
 
-    // Read by whatever thread draws, so volatile. The tick a step was launched on rather than the tick it
-    // landed on: that one is a multiple of the cadence on every machine, where the landing moves with the
-    // hardware, and a renderer that paced itself off the landing would run a different clock on every box.
+    // The tick a step was launched on rather than the tick it landed on: that one is a multiple of the
+    // cadence on every machine, where the landing moves with the hardware, and a renderer that paced itself
+    // off the landing would run a different clock on every box. Volatile because it is written here on the
+    // server thread and read by the worker once the step returns.
     private volatile long ticksAtLastStep;
+
+    public SkyRunner(Supplier<SkySolver> open, int ticksPerStep) {
+        this(open, ticksPerStep, snapshot -> {
+        });
+    }
 
     /**
      * @param open builds the solver, on the worker thread. It has to answer rather than throw: the choice
      *     between the card and the processor, and the fallback when the card refuses, belong to the caller,
      *     since only the caller can say which one an operator asked for
      * @param ticksPerStep server ticks between two steps
+     * @param afterStep run on the worker with each published step, for work that would otherwise land on
+     *     the tick. Packing a field for the network is fifteen milliseconds on an overcast sky, a third of
+     *     the budget for a tick, and the worker has just gone idle. It runs after publication rather than
+     *     instead of it, so a hook that throws stops the sky in the same way a step that throws does
      */
-    public SkyRunner(Supplier<SkySolver> open, int ticksPerStep) {
+    public SkyRunner(Supplier<SkySolver> open, int ticksPerStep, Consumer<SkySnapshot> afterStep) {
         this.ticksPerStep = Math.max(1, ticksPerStep);
+        this.afterStep = afterStep;
         this.worker = Executors.newSingleThreadExecutor(task -> {
             Thread thread = new Thread(task, "VortexDread sky");
             thread.setDaemon(true);
@@ -83,23 +95,9 @@ public final class SkyRunner implements AutoCloseable {
         });
     }
 
-    /**
-     * The two most recent steps, or null until the second one lands, and the fraction of the way between them.
-     *
-     * <p>Read from any thread. What makes that safe is that a snapshot is never written after it is published
-     * and the reference is volatile, so a reader either sees the old pair whole or the new pair whole.
-     *
-     * <p>The fraction is worked out from the tick the caller is on rather than kept here, because a renderer
-     * asks for it mid-frame between two ticks and only it knows how far through the tick it is.
-     */
+    /** The two most recent steps and where between them this frame sits, or null before the second one. */
     public SkyView view(long tick, float partialTick) {
-        SkySnapshot newest = current;
-        SkySnapshot older = previous;
-        if (newest == null || older == null) {
-            return null;
-        }
-        float elapsed = tick + partialTick - ticksAtLastStep;
-        return new SkyView(older, newest, Math.min(1.0f, Math.max(0.0f, elapsed / ticksPerStep)));
+        return feed.view(tick, partialTick);
     }
 
     /**
@@ -135,12 +133,12 @@ public final class SkyRunner implements AutoCloseable {
         }
     }
 
-    // Only ever called from the worker, right after the step it describes, and the order of the two writes
-    // matters: previous first, so a reader that catches the pair mid-rotation sees two steps that follow each
-    // other rather than the same one twice.
+    // Only ever called from the worker, right after the step it describes. The copy is taken here rather
+    // than by the feed because this is the last moment the grid is still the state that was just computed.
     private void publish(SkySolver sky) {
-        previous = current;
-        current = SkySnapshot.of(sky.grid(), sky.stepsTaken());
+        SkySnapshot published = SkySnapshot.of(sky.grid(), sky.stepsTaken());
+        feed.offer(published, ticksAtLastStep, ticksPerStep);
+        afterStep.accept(published);
     }
 
     // A task that threw leaves the future done and the solver as it was, so without this the sky would go
