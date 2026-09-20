@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Reads and writes {@link SkyConfig} as JSON, by reflection over its fields.
+ * Reads and writes {@link SkyConfig} and {@link LookConfig} as JSON, by reflection over their fields.
  *
  * <p>Reflection rather than a serializer per option, so adding an option is adding a field and nothing
  * else. The file is rewritten after every read, which is what makes an option added by an update appear
@@ -92,13 +92,15 @@ public final class ConfigFile {
         }
     }
 
-    /** The options, in declaration order so the file reads the way the class does. */
+    /** The options, in declaration order so the file reads the way the classes do, weather first. */
     private static List<Field> options() {
         List<Field> found = new ArrayList<>();
-        for (Field field : SkyConfig.class.getDeclaredFields()) {
-            int how = field.getModifiers();
-            if (Modifier.isStatic(how) && Modifier.isPublic(how) && !Modifier.isFinal(how)) {
-                found.add(field);
+        for (Class<?> holder : List.of(SkyConfig.class, LookConfig.class)) {
+            for (Field field : holder.getDeclaredFields()) {
+                int how = field.getModifiers();
+                if (Modifier.isStatic(how) && Modifier.isPublic(how) && !Modifier.isFinal(how)) {
+                    found.add(field);
+                }
             }
         }
         return found;
