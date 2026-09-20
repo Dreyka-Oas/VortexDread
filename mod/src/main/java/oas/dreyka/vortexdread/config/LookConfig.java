@@ -49,4 +49,34 @@ public final class LookConfig {
      * than the terrain is drawn, so the missing part is behind the horizon on any normal render distance.
      */
     public static float cloudReachMetres = 12000.0f;
+
+    /**
+     * How long the first step towards the sun is, metres. Each of the six after it is twice the last.
+     *
+     * <p>Fifty covers three kilometres by the end, which is wider than a cumulus, while still counting
+     * the water nearest the sample closely. That is the right way round: the water in the first hundred
+     * metres decides most of how much sun gets through.
+     */
+    public static float cloudLightStepMetres = 50.0f;
+
+    /**
+     * How much of the powder term to apply, nought to one.
+     *
+     * <p>Powder is the correction for what plain absorption gets backwards. A real cloud's lit face
+     * darkens towards its edge, because a thin edge holds too little water to scatter light back at the
+     * eye; absorption alone makes exactly that edge the brightest part, and a cumulus ends up reading as
+     * a cotton ball lit from inside. At nought the cloud goes back to that.
+     */
+    public static float cloudPowder = 0.5f;
+
+    /** How bright the sun makes the face it reaches, against the game's own daylight colour. */
+    public static float cloudSunLight = 1.0f;
+
+    /**
+     * How bright the rest of the sky makes the face the sun never reaches.
+     *
+     * <p>The shaded side of a real cloud is not black, because half the sky is a lamp pointed at it.
+     * Below about a third the cloud reads as cut out of stone, above about two thirds it goes flat.
+     */
+    public static float cloudSkyLight = 0.45f;
 }

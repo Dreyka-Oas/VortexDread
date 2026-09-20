@@ -15,10 +15,10 @@ import org.joml.Vector3fc;
 /**
  * The handful of numbers one frame hands the program, and the buffer they travel in.
  *
- * <p>Six slots of four floats, in the order {@code cloud.fsh} declares them. Four floats each and never
- * three: the rule that lays a uniform block out in memory gives a three float member the room of four but
- * lets the next member start in the leftover quarter, and whether the code filling the buffer agrees about
- * that is a question with two answers on two drivers. A block of nothing but four float slots has one.
+ * <p>Ten slots of four floats, in the order {@code cloud_field.glsl} declares them. Four floats each and
+ * never three: the rule that lays a uniform block out in memory gives a three float member the room of four
+ * but lets the next member start in the leftover quarter, and whether the code filling the buffer agrees
+ * about that is a question with two answers on two drivers. A block of nothing but four float slots has one.
  *
  * <p>Three buffers deep rather than one, which is what the game's own passes do. Writing over a buffer the
  * card has not finished reading makes the write wait for it, and at sixty frames a second that wait is the
@@ -26,8 +26,9 @@ import org.joml.Vector3fc;
  */
 public final class CloudNumbers implements AutoCloseable {
 
-    private static final int BYTES = new Std140SizeCalculator()
-            .putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().get();
+    private static final int SLOTS = 10;
+
+    private static final int BYTES = size();
 
     private final MappableRingBuffer ring;
 
@@ -37,9 +38,10 @@ public final class CloudNumbers implements AutoCloseable {
     }
 
     /** Fills this frame's buffer and hands it back for the draw to bind. */
-    public GpuBuffer write(Camera camera, SkyView view, CloudVolume volume) {
+    public GpuBuffer write(Camera camera, SkyView view, CloudVolume volume, float partialTick) {
         SkySnapshot sky = view.to();
         CloudAtlas atlas = volume.atlas();
+        CloudLight light = CloudLight.of(camera, partialTick);
         Vector3fc forward = camera.forwardVector();
         Vector3fc up = camera.upVector();
         Vector3fc left = camera.leftVector();
@@ -51,15 +53,47 @@ public final class CloudNumbers implements AutoCloseable {
                 .mapBuffer(buffer, false, true)) {
             Std140Builder.intoBuffer(mapped.data())
                     .putVec4(forward.x(), forward.y(), forward.z(), view.fraction())
-                    .putVec4(up.x(), up.y(), up.z(), volume.olderPeak())
-                    .putVec4(left.x(), left.y(), left.z(), volume.newerPeak())
+                    .putVec4(up.x(), up.y(), up.z(), volume.older().peak())
+                    .putVec4(left.x(), left.y(), left.z(), volume.newer().peak())
                     .putVec4(wrapped(at.x, width), (float) (at.y - LookConfig.groundLevelBlock),
                             wrapped(at.z, width), sky.cellSize)
                     .putVec4(sky.sizeX, sky.sizeY, sky.sizeZ, LookConfig.cloudExtinction)
                     .putVec4(atlas.tilesAcross(), atlas.tileWidth(), atlas.tileHeight(),
-                            Math.max(1.0f, LookConfig.cloudReachMetres));
+                            Math.max(1.0f, LookConfig.cloudReachMetres))
+                    .putVec4(light.toward().x(), light.toward().y(), light.toward().z(),
+                            Math.max(1.0f, LookConfig.cloudLightStepMetres))
+                    .putVec4(light.sun().x(), light.sun().y(), light.sun().z(),
+                            LookConfig.cloudPowder)
+                    .putVec4(light.sky().x(), light.sky().y(), light.sky().z(), 0.0f)
+                    .putVec4(floorOfBand(volume, sky), ceilingOfBand(volume, sky), 0.0f, 0.0f);
         }
         return buffer;
+    }
+
+    /**
+     * The altitudes worth marching through, in metres, widened by a cell on each side.
+     *
+     * <p>Both steps count, since a cloud the older one still has and the newer one has lost would
+     * otherwise be clipped away mid-fade. The extra cell is the vertical blend's reach: the lowest wet
+     * cell mixes with the dry one under it, and cutting the march at the wet one cuts that gradient off
+     * square.
+     */
+    private static float floorOfBand(CloudVolume volume, SkySnapshot sky) {
+        int cell = Math.min(volume.older().lowestCell(), volume.newer().lowestCell());
+        return Math.max(0, cell - 1) * sky.cellSize;
+    }
+
+    private static float ceilingOfBand(CloudVolume volume, SkySnapshot sky) {
+        int cell = Math.max(volume.older().pastHighestCell(), volume.newer().pastHighestCell());
+        return Math.min(sky.sizeY, cell + 1) * sky.cellSize;
+    }
+
+    private static int size() {
+        Std140SizeCalculator room = new Std140SizeCalculator();
+        for (int slot = 0; slot < SLOTS; slot++) {
+            room.putVec4();
+        }
+        return room.get();
     }
 
     /** Moves on to the next buffer, after the draw that read this one has been issued. */

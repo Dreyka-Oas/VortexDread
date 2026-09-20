@@ -1,90 +1,77 @@
 #version 330
 
 #moj_import <minecraft:projection.glsl>
-
-// The two steps the server sent, each an atlas of tiles, four altitudes per texel.
-uniform sampler2D CloudsFrom;
-uniform sampler2D CloudsTo;
-
-// Everything in vec4 slots on purpose. A vec3 followed by a float is laid out one way by the std140
-// rule and another way by whatever fills the buffer, and the mismatch shows up as a working shader
-// on one driver and a black sky on the next. Sixteen byte members cannot be got wrong.
-layout(std140) uniform CloudSky {
-    vec4 CameraForward;   // xyz look direction, w how far between the two steps this frame sits
-    vec4 CameraUp;        // xyz up, w peak of the older field
-    vec4 CameraLeft;      // xyz left, w peak of the newer field
-    vec4 CameraInVolume;  // xyz camera inside the volume in metres, w cell edge in metres
-    vec4 VolumeCells;     // xyz cells per axis, w extinction per unit of water per metre
-    vec4 AtlasShape;      // tiles across, tile width, tile height, metres to march at most
-};
+#moj_import <vortexdread:cloud_field.glsl>
 
 in vec2 texCoord;
 
 out vec4 fragColor;
 
-// Altitudes in one texel, which is the channel count of the image rather than a tuning number.
-const float PER_TEXEL = 4.0;
-
-// Deliberately coarse, and deliberately fixed. A step of a couple of hundred metres draws a cloud with
-// visible slabs in it, which is the point at this stage: it says the field arrived and where it is. The
-// step size, the jitter and the quality levels are the pass that comes after this one.
+// Along the view. Deliberately coarse and deliberately fixed: the jitter, the reprojection and the
+// quality levels are a later pass. What keeps this usable at sixty-four is that the march is clipped
+// to the altitudes that actually hold water, so the steps land in the cloud instead of around it.
 const int STEPS = 64;
 
-/** How big the image is, worked out from the shape rather than sent, since it follows from it. */
-vec2 atlasSize() {
-    float tiles = ceil(VolumeCells.y / PER_TEXEL);
-    return vec2(AtlasShape.x * AtlasShape.y, ceil(tiles / AtlasShape.x) * AtlasShape.z);
-}
+// Towards the sun. Six is enough because the steps double: the water in the first hundred metres
+// decides most of the answer and the water a kilometre away only has to be counted roughly.
+const int LIGHT_STEPS = 6;
 
-/** One tile, read at a fractional cell position so the hardware does the horizontal filtering. */
-vec4 tileAt(sampler2D field, float tile, vec2 xz) {
-    float across = AtlasShape.x;
-    vec2 corner = vec2(mod(tile, across) * AtlasShape.y, floor(tile / across) * AtlasShape.z);
-    // One texel in for the border, half a texel further to land on the centre of the cell at zero.
-    return texture(field, (corner + vec2(1.5) + xz) / atlasSize());
+// Octaves of the multiple scattering approximation, and how much thinner and how much quieter each one
+// is than the last. Three is where everyone stops, because the fourth changes nothing anyone can see.
+const int OCTAVES = 3;
+const float THINNER = 0.5;
+const float QUIETER = 0.5;
+
+// Below this the cloud in front has swallowed everything behind and the rest of the march is arithmetic
+// on a number nobody will see.
+const float OPAQUE = 0.004;
+
+/**
+ * How much of the sun reaches one point, by marching at it and counting the water in the way.
+ *
+ * Not one exponential but a sum of three, which is the cheap stand-in for multiple scattering. A
+ * photon that bounced around inside the cloud before it left travelled through less extinction than a
+ * straight line through the same water says it did, so each octave halves the extinction and halves
+ * what it contributes. Without this every cloud comes out the colour of slate, because single
+ * scattering under-counts by most of the light a real cloud sends back.
+ */
+float sunReach(vec3 metres) {
+    float depth = 0.0;
+    float span = SunToward.w;
+    float along = 0.0;
+    for (int step = 0; step < LIGHT_STEPS; step++) {
+        depth += waterAt(metres + SunToward.xyz * (along + 0.5 * span)) * span;
+        along += span;
+        span *= 2.0;
+    }
+    float thickness = depth * VolumeCells.w;
+    float lit = 0.0;
+    float total = 0.0;
+    float thinner = 1.0;
+    float quieter = 1.0;
+    for (int octave = 0; octave < OCTAVES; octave++) {
+        lit += quieter * exp(-thickness * thinner);
+        total += quieter;
+        thinner *= THINNER;
+        quieter *= QUIETER;
+    }
+    // Divided back out so a point the sun reaches unobstructed gets exactly the light that falls on it.
+    return lit / total;
 }
 
 /**
- * One field at one point, with the vertical blend done by hand.
+ * A different starting offset for every pixel, nought to one.
  *
- * <p>Three times in four the altitude above is the next channel of the texel already fetched, which is
- * the whole reason four of them share one. The fourth time it is the first channel of the tile above.
+ * Interleaved gradient noise, which is one dot product and needs neither a texture nor a uniform. The
+ * march has to start somewhere inside its first step, and starting every ray at the same place turns
+ * one step boundary into a line drawn across the whole sky. Scattered per pixel it becomes grain, and
+ * the eye reads grain on a cloud as cloud.
  */
-float levelAt(sampler2D field, vec2 xz, float tile, int channel, float rise) {
-    vec4 here = tileAt(field, tile, xz);
-    float above;
-    if (channel < 3) {
-        above = here[channel + 1];
-    } else {
-        above = tileAt(field, tile + 1.0, xz).r;
-    }
-    return mix(here[channel], above, rise);
-}
-
-/** Condensed water at one point in the volume, blended between the two steps the client holds. */
-float waterAt(vec3 metres) {
-    float y = metres.y / CameraInVolume.w;
-    // Strictly under the top row, not at it: the row above is what the vertical blend reaches for, and
-    // at the very top that row is a tile the atlas does not have. Empty air either way.
-    if (y < 0.0 || y >= VolumeCells.y - 1.0) {
-        return 0.0;
-    }
-    vec2 xz = mod(metres.xz / CameraInVolume.w, VolumeCells.xz);
-    float low = floor(y);
-    float rise = y - low;
-    float tile = floor(low / PER_TEXEL);
-    int channel = int(low) - int(tile) * int(PER_TEXEL);
-
-    float older = levelAt(CloudsFrom, xz, tile, channel, rise) * CameraUp.w;
-    float newer = levelAt(CloudsTo, xz, tile, channel, rise) * CameraLeft.w;
-    return mix(older, newer, CameraForward.w);
+float dither(vec2 pixel) {
+    return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
 }
 
 void main() {
-    float cellSize = CameraInVolume.w;
-    float ceilingY = VolumeCells.y * cellSize;
-    float camY = CameraInVolume.y;
-
     // The reciprocal of a perspective matrix's diagonal is the tangent of half the angle on that axis,
     // so the ray needs no field of view uniform of its own. Right is the other way from left.
     vec2 ndc = texCoord * 2.0 - 1.0;
@@ -92,33 +79,52 @@ void main() {
             - ndc.x * CameraLeft.xyz / ProjMat[0][0]
             + ndc.y * CameraUp.xyz / ProjMat[1][1]);
 
-    // Both horizontal axes tile, so the only faces the ray can cross are the floor and the ceiling.
+    // Both horizontal axes tile, so the only faces the ray can cross are the floor and the ceiling of
+    // the band, and the band is the wet altitudes rather than the whole volume.
+    float camY = CameraInVolume.y;
+    float below = CloudBand.x - camY;
+    float above = CloudBand.y - camY;
     float enter = 0.0;
     float leave = AtlasShape.w;
     if (abs(ray.y) > 1.0e-4) {
-        float toFloor = -camY / ray.y;
-        float toCeiling = (ceilingY - camY) / ray.y;
-        enter = max(0.0, min(toFloor, toCeiling));
-        leave = min(leave, max(toFloor, toCeiling));
-    } else if (camY < 0.0 || camY > ceilingY) {
+        float toLow = below / ray.y;
+        float toHigh = above / ray.y;
+        enter = max(0.0, min(toLow, toHigh));
+        leave = min(leave, max(toLow, toHigh));
+    } else if (below > 0.0 || above < 0.0) {
         discard;
     }
     if (leave <= enter) {
         discard;
     }
 
-    // Beer and Lambert, and nothing else yet: how much of the sky behind survives the water in front.
-    // Light, its scattering and the erosion under a cell all come later, and each one needs this right
-    // first, because every one of them is a factor on a number this loop produces.
+    // Beer and Lambert down the view, and the same again at each step towards the sun.
     float span = (leave - enter) / float(STEPS);
+    float start = enter + dither(gl_FragCoord.xy) * span;
     float transmittance = 1.0;
+    vec3 scattered = vec3(0.0);
     for (int step = 0; step < STEPS; step++) {
-        vec3 at = CameraInVolume.xyz + ray * (enter + (float(step) + 0.5) * span);
+        vec3 at = CameraInVolume.xyz + ray * (start + float(step) * span);
         float water = waterAt(at);
-        if (water > 0.0) {
-            transmittance *= exp(-water * VolumeCells.w * span);
+        if (water <= 0.0) {
+            continue;
+        }
+        float stepThrough = exp(-water * VolumeCells.w * span);
+        // Powder is measured over one cell and not over one step, since it says how dense the cloud is
+        // here and not how finely this frame chose to sample it. Over a step it would change the look
+        // of the sky every time the quality setting moved.
+        float powder = 1.0 - exp(-2.0 * water * VolumeCells.w * CameraInVolume.w);
+        vec3 lit = SunLight.rgb * sunReach(at) * mix(1.0, powder, SunLight.w) + SkyLight.rgb;
+        // The exact integral over the step rather than a rectangle at its middle, which is what stops
+        // a coarse march from drawing the cloud in bands of its own step size.
+        scattered += transmittance * lit * (1.0 - stepThrough);
+        transmittance *= stepThrough;
+        if (transmittance < OPAQUE) {
+            break;
         }
     }
 
-    fragColor = vec4(1.0, 1.0, 1.0, 1.0 - transmittance);
+    // Already multiplied by its own coverage, so the pipeline blends premultiplied and does not do it
+    // a second time. Dividing the colour back out would only lose precision where the cloud is thin.
+    fragColor = vec4(scattered, 1.0 - transmittance);
 }

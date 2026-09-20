@@ -29,7 +29,7 @@ public final class CloudVolume implements AutoCloseable {
     private final ByteBuffer scratch;
 
     private final long[] steps = {Long.MIN_VALUE, Long.MIN_VALUE};
-    private final float[] peaks = new float[2];
+    private final CloudPacking.Filled[] held = new CloudPacking.Filled[2];
 
     /** Which slot holds the older of the two. The other one holds the newer. */
     private int older;
@@ -60,12 +60,12 @@ public final class CloudVolume implements AutoCloseable {
         return views[1 - older];
     }
 
-    public float olderPeak() {
-        return peaks[older];
+    public CloudPacking.Filled older() {
+        return held[older];
     }
 
-    public float newerPeak() {
-        return peaks[1 - older];
+    public CloudPacking.Filled newer() {
+        return held[1 - older];
     }
 
     /**
@@ -88,7 +88,7 @@ public final class CloudVolume implements AutoCloseable {
 
     private void upload(int slot, SkySnapshot sky) {
         int width = atlas.width();
-        peaks[slot] = atlas.write(sky, (x, y, argb) -> {
+        held[slot] = CloudPacking.write(atlas, sky, (x, y, argb) -> {
             int at = (y * width + x) * 4;
             scratch.put(at, (byte) (argb >> 16));
             scratch.put(at + 1, (byte) (argb >> 8));

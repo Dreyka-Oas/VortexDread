@@ -41,7 +41,7 @@ public final class CloudPipeline {
             .withSampler(OLDER)
             .withSampler(NEWER)
             .withUniform(UNIFORM, UniformType.UNIFORM_BUFFER)
-            .withBlend(BlendFunction.TRANSLUCENT)
+            .withBlend(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA)
             .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
             .withDepthWrite(false)
             .withCull(false)

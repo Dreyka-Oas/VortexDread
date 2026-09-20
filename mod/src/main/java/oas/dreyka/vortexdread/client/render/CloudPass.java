@@ -73,7 +73,7 @@ public final class CloudPass {
         }
         // Both uploads first: the encoder refuses every other command while a render pass is open.
         volume.show(view.from(), view.to());
-        GpuBuffer frame = numbers.write(camera, view, volume);
+        GpuBuffer frame = numbers.write(camera, view, volume, partialTick());
         announce(sky);
 
         GpuSampler edge = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
@@ -99,14 +99,16 @@ public final class CloudPass {
      * on screen after it and the field reached the card and the program lost it.
      */
     private static void announce(SkySnapshot sky) {
-        if (announced || volume.newerPeak() <= 0.0f) {
+        CloudPacking.Filled held = volume.newer();
+        if (announced || held.peak() <= 0.0f) {
             return;
         }
         announced = true;
         CloudAtlas atlas = volume.atlas();
         VortexDread.LOGGER.info("[VortexDread] cloud on the card at step {}: {} by {} by {} cells in a"
-                        + " {} by {} atlas, peak {}", sky.step, sky.sizeX, sky.sizeY, sky.sizeZ,
-                atlas.width(), atlas.height(), volume.newerPeak());
+                        + " {} by {} atlas, peak {}, wet from layer {} to {}", sky.step, sky.sizeX,
+                sky.sizeY, sky.sizeZ, atlas.width(), atlas.height(), held.peak(), held.lowestCell(),
+                held.pastHighestCell());
     }
 
     private static float partialTick() {
