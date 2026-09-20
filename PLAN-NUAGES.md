@@ -207,19 +207,50 @@ refus d'un paquet malformé ont chacun leur test.
 
 ### 6. Le rendu
 
-Raymarching dans un volume, en reprenant la chaîne du shader d'entonnoir existant, qui fait déjà
-marche de vue, marche de lumière et qualité réglable, et qui est le meilleur point de départ
-disponible.
+Raymarching dans un volume. Le shader d'entonnoir archivé ne sert pas de point de départ comme prévu:
+il s'appuie sur `MATRICES_FOG_SNIPPET` et `GLOBALS_SNIPPET`, privés en 1.21.11, et le programme part
+donc de zéro sur les seuls morceaux publics.
 
-- densité lue dans la grille physique, érodée par du bruit Worley-Perlin sous la taille de cellule;
-- absorption par Beer-Lambert, plus le terme Powder de Horizon Zero Dawn qui corrige les nuages trop
-  sombres;
+Blaze3D n'a aucune texture en trois dimensions dans cette version. `GlConst` ne contient que
+`GL_TEXTURE_2D` et les six faces de cube, `createTexture` refuse toute profondeur supérieure à un en
+dehors du cas cubemap, et les formats se limitent à RGBA8, RED8, RED8I et DEPTH32. Le volume part donc
+à plat, en tuiles, quatre altitudes par texel puisque l'image est RGBA de toute façon: une lecture
+entre deux altitudes devient une seule prise trois fois sur quatre. Chaque tuile porte une bordure
+d'un texel qui tient le bord opposé, sans quoi le filtrage matériel irait chercher l'altitude voisine
+et perdrait l'enroulement horizontal. La grille de 96 par 48 par 96 tient dans 392 par 294, soit
+461 ko contre 1,8 Mo à raison d'un canal par cellule.
+
+Aucune géométrie. Le volume fait six kilomètres de large et trois de haut, donc une boîte à sa taille
+serait presque entièrement derrière le plan lointain. Le programme reprend le triangle plein écran du
+jeu, `core/screenquad`, qui se construit à partir du seul indice de sommet, et toute la distance se
+parcourt dans l'étage fragment où le plan lointain n'a pas voix. La direction du rayon se reconstruit
+de la base de la caméra et de la diagonale de `ProjMat`, déjà un uniforme automatique: l'inverse de
+chaque terme est la tangente du demi-angle sur son axe, donc pas un uniforme de plus à tenir.
+
+La passe se glisse derrière celle du ciel et devant celle du terrain, et c'est toute l'histoire de
+l'occlusion. Le nuage est à un kilomètre, le terrain à quelques centaines de mètres, donc le terrain
+dessiné ensuite recouvre ce qui est derrière lui sans test de profondeur, sans lecture du tampon et
+sans ordre à tenir. Le mixin déclare la cible principale en lecture et en écriture, ce qui suffit au
+graphe d'images pour la placer là.
+
+Les réglages d'une image passent par un bloc d'uniformes à nous, six emplacements de quatre flottants
+et jamais trois: la règle std140 donne à un membre de trois la place de quatre mais laisse le suivant
+démarrer dans le quart restant, et savoir si le code qui remplit le tampon est d'accord là-dessus est
+une question à deux réponses selon le pilote.
+
+Reste à faire, dans cet ordre, chacun étant un facteur sur le nombre que la boucle actuelle produit:
+
+- absorption complétée par le terme Powder de Horizon Zero Dawn, qui corrige les nuages trop sombres;
 - diffusion avant par Henyey-Greenstein à deux lobes, un pour le halo solaire, un pour les bords
   d'argent, sans quoi un coucher de soleil ne donne rien;
-- rendu en demi-résolution et reprojection temporelle pour amortir le coût sur plusieurs images;
-- bruit bleu spatiotemporel sur l'échantillonnage, contre le banding.
+- érosion par bruit Worley-Perlin sous la taille de cellule;
+- demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage;
+- réglage bas, moyen, haut dans la config, le haut visant la 9060 XT et le bas une machine modeste.
 
-Réglage bas, moyen, haut dans la config, le haut visant la 9060 XT et le bas une machine modeste.
+Une leçon de la première vérification, qui coûte une heure à qui la répète: le client de test a Photon
+actif dans Iris. Trois captures de ciel volumétrique convaincant plus tard, c'était le sien, et ses
+propres options parlent de `CLOUDS_CUMULUS_CONGESTUS`. Le marcheur du mod se photographie pack coupé.
+La superposition des deux ciels reste le problème annoncé plus haut.
 
 ### 7. Vérification en jeu
 
