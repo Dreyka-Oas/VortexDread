@@ -1,6 +1,7 @@
 package oas.dreyka.vortexdread;
 
 import net.fabricmc.api.ModInitializer;
+import net.minecraft.resources.Identifier;
 import oas.dreyka.vortexdread.init.BootstrapInit;
 import oas.dreyka.vortexdread.init.SkyInit;
 
@@ -18,6 +19,11 @@ public final class VortexDread implements ModInitializer {
     public static final String ID = "vortexdread";
 
     public static final Logger LOGGER = LoggerFactory.getLogger("VortexDread");
+
+    /** This mod's namespace on anything the game addresses by name: a shader, a pipeline, a payload. */
+    public static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath(ID, path);
+    }
 
     @Override
     public void onInitialize() {

@@ -1,10 +1,16 @@
 package oas.dreyka.vortexdread.mixin.client;
 
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
+import net.minecraft.client.Camera;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.LevelTargetBundle;
 import net.minecraft.world.phys.Vec3;
+import oas.dreyka.vortexdread.client.render.CloudPass;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -29,10 +35,29 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
 
+    @Shadow
+    @Final
+    private LevelTargetBundle targets;
+
     @Inject(method = "addCloudsPass", at = @At("HEAD"), cancellable = true)
     private void vortexdread$keepTheSkyClear(FrameGraphBuilder builder, CloudStatus status,
             Vec3 cameraPosition, long gameTime, float partialTick, int cloudColour, float cloudHeight,
             CallbackInfo info) {
         info.cancel();
+    }
+
+    /**
+     * The mod's own sky, added right behind the game's.
+     *
+     * <p>Here rather than where the clouds used to be because the two want opposite things from the depth
+     * buffer. The game's cloud pass runs last, on a target of its own, and pays for a depth test to be
+     * hidden by a hill. A volume marched from the camera has no geometry to test, so it goes in before the
+     * terrain instead and is covered by it, which is free and is also the right answer: nothing the player
+     * can build reaches the altitude this draws at.
+     */
+    @Inject(method = "addSkyPass", at = @At("TAIL"))
+    private void vortexdread$drawOurOwnSky(FrameGraphBuilder builder, Camera camera,
+            GpuBufferSlice fog, CallbackInfo info) {
+        CloudPass.add(builder, targets, camera);
     }
 }

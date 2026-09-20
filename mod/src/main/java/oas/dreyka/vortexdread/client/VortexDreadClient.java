@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import oas.dreyka.vortexdread.VortexDread;
+import oas.dreyka.vortexdread.client.render.CloudPass;
 import oas.dreyka.vortexdread.net.SkyFieldPayload;
 
 /**
@@ -32,7 +33,12 @@ public final class VortexDreadClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> sky.onTick());
 
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> sky.forget());
+        // The field and the textures holding it go together: a world left behind may have had a grid the
+        // next one is not shaped for, and a texture outlives a disconnect unless something closes it.
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            sky.forget();
+            CloudPass.forget();
+        });
     }
 
     // The counterpart of the server's boot line, and for the same reason: without it a player on a server
