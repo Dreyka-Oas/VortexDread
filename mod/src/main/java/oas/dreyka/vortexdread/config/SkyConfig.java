@@ -5,15 +5,14 @@ import oas.dreyka.vortexdread.atmosphere.AtmosphereSettings;
 /**
  * The sky a server decides on, and the only options that change what the simulation produces.
  *
- * <p>Everything that shapes the sky has to hold the same value on the server and on every client connected
- * to it. Clients do not receive the cloud field, they replay the simulation from the same seed and the same
- * numbers, so a client whose grid is one cell narrower is a client watching different weather. Until the
- * network stage exists each side reads its own file and a mismatch shows as two skies; after it, the
- * server's values arrive on join and overwrite whatever the client had.
+ * <p>Read on the server and nowhere else. A client receives the cloud field itself rather than replaying
+ * it, so none of these has to agree with anything on the far end: a player whose own file says a different
+ * grid width still watches the server's weather, because the sizes travel with every field. What an
+ * operator sets here is what every player on the server sees.
  *
- * <p>The two that pick the machinery rather than the weather are the exception, and they stay local. Which
- * card a machine has is nobody else's business, and the card and the processor return the same numbers to the
- * bit, so a server running on one and a client on the other still watch the same clouds.
+ * <p>The two that pick the machinery rather than the weather change nothing anyone can see. Which card a
+ * machine has is nobody else's business, and the card and the processor return the same numbers to the bit,
+ * so an operator can switch between them mid-session and the sky carries on.
  *
  * <p>What is not here is deliberate. The thermodynamics are physics, not preference: the latent heat of
  * water and the gas constant of air are what they are, and an option to change them is an option to make
@@ -55,8 +54,8 @@ public final class SkyConfig {
      * nothing about the physics changes.
      *
      * <p>It has a ceiling because past it the sky stops being a simulation. Above roughly twenty, the steps
-     * come closer together than the card can finish them and the runner starts skipping, which stops the pace
-     * being reproducible and leaves two machines on different steps.
+     * come closer together than the card can finish them and the runner starts skipping, so the weather runs
+     * slower than the number asks for and the clouds jump between the steps that did land.
      */
     public static float skyTimeScale = 1.0f;
 
@@ -131,9 +130,9 @@ public final class SkyConfig {
     /**
      * Server ticks between two steps, which is the only place Minecraft's clock meets the simulation's.
      *
-     * <p>Counted in ticks rather than measured off a wall clock on purpose. A client replays the sky from the
-     * seed instead of receiving it, so the pace has to be something both sides can derive: at twenty ticks a
-     * second the same tick number is the same step number on every machine, and a wall clock is not.
+     * <p>Counted in ticks rather than measured off a wall clock on purpose. A client blends across this
+     * number to get from one field to the next, and a server that has dropped to fifteen ticks a second has
+     * a sky that slows down with it rather than one that keeps jumping ahead of the frames.
      */
     public static int ticksPerStep() {
         float scale = Math.min(20.0f, Math.max(0.05f, skyTimeScale));

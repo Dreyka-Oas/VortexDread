@@ -45,6 +45,20 @@ public final class SkySnapshot {
                 grid.cloudWater.clone());
     }
 
+    /**
+     * Takes over a field the caller has just built and will not touch again, which is what arrives off the
+     * network: copying it a second time would double the allocation for nothing.
+     */
+    public static SkySnapshot adopting(long step, int sizeX, int sizeY, int sizeZ, float cellSize,
+            float[] cloudWater) {
+        int cells = sizeX * sizeY * sizeZ;
+        if (cloudWater.length != cells) {
+            throw new IllegalArgumentException("a " + sizeX + " by " + sizeY + " by " + sizeZ
+                    + " sky holds " + cells + " cells, not " + cloudWater.length);
+        }
+        return new SkySnapshot(step, sizeX, sizeY, sizeZ, cellSize, cloudWater);
+    }
+
     public int index(int x, int y, int z) {
         return (y * sizeZ + z) * sizeX + x;
     }
