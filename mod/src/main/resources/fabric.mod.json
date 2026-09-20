@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "vortexdread",
+  "version": "1.0.0",
+  "name": "Vortex Dread",
+  "description": "The sky is simulated rather than drawn. Warm damp ground sends bubbles of air up, they cool as they climb, and where they can no longer hold their water a cumulus grows out of it: a flat base at the altitude the arithmetic puts it, tops that keep building, and an anvil where the air aloft stops them. Minecraft's own clouds are switched off, and what replaces them is a patch of troposphere running on the graphics card.",
+  "authors": [
+    "Dreyka Oas"
+  ],
+  "license": "MIT",
+  "contact": {
+    "issues": "https://github.com/Dreyka-Oas/VortexDread/issues"
+  },
+  "icon": "assets/vortexdread/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "oas.dreyka.vortexdread.VortexDread"
+    ],
+    "client": [
+      "oas.dreyka.vortexdread.client.VortexDreadClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "java": ">=21"
+  },
+  "suggests": {
+    "iris": "*",
+    "sodium": "*",
+    "lithium": "*",
+    "ferritecore": "*",
+    "spark": "*"
+  }
+}
