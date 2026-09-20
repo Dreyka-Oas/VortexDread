@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "oas.dreyka.vortexdread.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [],
+  "client": [
+    "client.LevelRendererMixin"
+  ]
+}

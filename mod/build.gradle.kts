@@ -1,7 +1,7 @@
 import java.nio.file.Files
 
 plugins {
-    id("fabric-loom") version "1.17.12"
+    id("fabric-loom") version "1.17.21"
     java
     `maven-publish`
 }

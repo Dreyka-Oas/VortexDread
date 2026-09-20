@@ -72,14 +72,34 @@ Dossier vide, `build.gradle.kts`, métadonnées, point d'entrée client et serve
 `config/oas/vortexdread.json`, la boucle de test hors-jeu. Rien de visible en jeu. Sortie: le mod se
 charge et ne fait rien.
 
-### 2. Tuer les nuages de Minecraft
+### 2. Tuer les nuages de Minecraft, fait
 
-Trois chemins existent, du plus propre au plus intrusif: la hauteur de nuage à `NaN` sur les effets
-de dimension, un renderer nul enregistré via `DimensionRenderingRegistry`, un mixin annulant l'appel.
-Le piège est ailleurs: Sodium remplace déjà entièrement le rendu des nuages par son `CloudRenderer`,
-et Iris désactive de force les mixins concurrents. Les deux sont dans le dossier de test. Cette
-phase se juge donc sur trois configurations, sans rien, avec Sodium, avec Sodium et Iris, et elle
-n'est finie que quand aucune des trois n'affiche un nuage vanilla ni ne plante.
+Les trois chemins envisagés se sont réduits à un seul, et pas celui qui était prévu. Deux sont morts
+d'eux-mêmes en 1.21.11: `DimensionRenderingRegistry` n'existe plus dans fabric-api, et
+`DimensionSpecialEffects` non plus, la hauteur des nuages étant passée en attribut d'environnement.
+
+Il reste un interrupteur dans le jeu lui-même, et il est meilleur que les trois: `LevelRenderer` ne
+planifie la passe des nuages que si l'alpha de `cloud_color` est strictement positif, et cette couleur
+est un champ du type de dimension, donc pilotable par données sans une ligne de code. Ce qu'un pack de
+données ne sait pas faire, c'est changer un champ: il remplace le fichier entier, donc éteindre une
+couleur reviendrait à embarquer notre propre copie du `min_y` de l'overworld, de sa hauteur et de sa
+hauteur logique, et à la porter à chaque mise à jour du jeu. Le mixin sur `addCloudsPass` fait la même
+chose sans toucher aux données du monde, et annule la passe plutôt que le dessin, donc la cible de
+rendu n'est même pas allouée.
+
+Le piège annoncé n'en était pas un: Sodium 0.8.12 ne reprend pas le rendu des nuages, il réécrit la
+méthode qui construit le maillage à l'intérieur du renderer du jeu, et ce maillage n'est jamais demandé.
+
+Les trois configurations, vérifiées à la même position, même heure, même météo, captures à l'appui.
+Sans rien: dalles blanches partout sur le témoin, ciel entièrement vide avec le mixin. Avec Sodium:
+ciel vide. Avec Sodium et Iris: aucun nuage vanilla, avec ou sans le mixin, parce qu'Iris remplace le
+pipeline entier dès qu'un pack de shaders est actif.
+
+Et c'est là qu'est la vraie trouvaille, qui est une contrainte pour la phase 6 plutôt qu'un reste de
+celle-ci. Sous Iris le ciel est plein de nuages volumétriques, et ce sont ceux du pack, dessinés dans
+ses propres shaders. Aucun accrochage côté mod ne les annule. Un joueur sous pack de shaders aura donc
+deux ciels superposés tant que la phase 6 ne traite pas le cas, et c'est exactement ce à quoi servait
+le dossier `patches/photon/` de l'ancien mod.
 
 ### 3. La grille d'atmosphère, faite
 

@@ -21,6 +21,9 @@
       "oas.dreyka.vortexdread.client.VortexDreadClient"
     ]
   },
+  "mixins": [
+    "vortexdread.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.19.0",
     "fabric-api": "*",
