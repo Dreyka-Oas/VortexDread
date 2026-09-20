@@ -125,15 +125,46 @@ la divergence résiduelle du solveur; sur l'eau c'est une broutille, sur une tem
 300 K c'est une boucle qui passe 200 K d'anomalie en deux minutes simulées. L'eau est donc comptée aux
 faces, la chaleur est transportée par la forme qui laisse l'uniforme uniforme.
 
-### 4. La carte graphique
+### 4. La carte graphique, faite
 
 Le même pas, en OpenCL. Le repli processeur reste la référence, et un test de parité impose que les
-deux donnent le même résultat chiffre pour chiffre dans la limite du double. Si la grille visée ne
-tient pas le budget, c'est la grille qui rétrécit, pas la physique qui se simplifie.
+deux donnent le même résultat chiffre pour chiffre. Si la grille visée ne tient pas le budget, c'est
+la grille qui rétrécit, pas la physique qui se simplifie.
 
 Le coût processeur est mesuré et il tranche la question: 14,7 ms par pas à 24x36x24, 61,7 à
-48x40x48, 132 à 64x48x64 et 297 à la grille visée de 96x48x96. Le tick serveur en a 50 en tout, donc
-la carte n'est pas une optimisation, c'est la condition pour que cette grille existe.
+48x40x48, 132 à 64x48x64 et 302,8 à la grille visée de 96x48x96. Le tick serveur en a 50 en tout,
+donc la carte n'est pas une optimisation, c'est la condition pour que cette grille existe. La carte
+fait le même pas en 2,32 ms, soit 130 fois mieux et 4,6 % d'un tick.
+
+Sortie obtenue. Onze noyaux, la parité au bit sur les six champs après un pas et après quarante, le
+banc de mesure, et le ciel branché sur le cycle de vie du serveur. La ligne d'amorçage nomme la carte
+choisie et celle qu'elle a devancée. Vérifié sur un serveur dédié sans fenêtre: 1300 ticks, six pas,
+la cadence exacte, aucun saut et aucune exception.
+
+Trois choses ont coûté cher et ne se devinent pas. L'exponentielle de la bibliothèque OpenCL n'est
+garantie qu'à quatre unités dans la dernière place et chaque fondeur dépense ce budget autrement,
+donc elle est écrite à la main, terme pour terme, des deux côtés.
+
+La division flottante simple a le droit de se tromper de deux unités et demie dans la dernière place,
+et cette carte s'en sert: 33 474 désaccords sur 100 000 paires contre Java. Un bit suffit, parce que
+les champs se nourrissent l'un l'autre et que l'écart double à chaque tour de boucle. L'option de
+compilation qui réclame une division correctement arrondie est acceptée puis ignorée par ce pilote,
+ce qui est pire que de ne rien demander. La double précision paraissait être la réponse et elle est
+pire encore: cette carte n'a pas de diviseur 64 bits, le pilote en développe un en logiciel, et le
+résultat diffère de Java sur 200 000 paires sur 200 000. Ce qui marche est de corriger le quotient
+plutôt que de le réclamer: le produit fusionné est exact par spécification des deux côtés, il récupère
+le reste que la division a jeté, et un pas de Newton sur ce reste tombe sur l'arrondi correct. Mesuré
+sur un million de paires couvrant toute la plage d'exposants, plus les diviseurs que la simulation
+utilise: aucun désaccord. La garantie a un plancher, 4e-31, sous lequel le reste tombe lui-même dans
+les sous-normaux que la carte écrase à zéro, et la physique n'en approche pas à vingt-cinq ordres de
+grandeur près.
+
+Enfin le pas ne tourne pas sur le fil du serveur. Sur la grille visée le processeur met six fois le
+budget d'un tick, donc un ciel avancé sur place gèle le serveur un tiers de seconde chaque fois qu'il
+avance. Un seul fil porte le solveur, carte ou processeur, et c'est aussi ce qu'exige une file de
+commandes OpenCL: ouverte, nourrie et libérée sur le même fil toute sa vie. La cadence se compte en
+ticks et non en secondes d'horloge, parce qu'un client rejoue le ciel depuis la graine et que le même
+numéro de tick doit donner le même numéro de pas sur toutes les machines.
 
 ### 5. Le réseau
 
