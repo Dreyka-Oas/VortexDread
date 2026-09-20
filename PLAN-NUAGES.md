@@ -163,16 +163,47 @@ Enfin le pas ne tourne pas sur le fil du serveur. Sur la grille visée le proces
 budget d'un tick, donc un ciel avancé sur place gèle le serveur un tiers de seconde chaque fois qu'il
 avance. Un seul fil porte le solveur, carte ou processeur, et c'est aussi ce qu'exige une file de
 commandes OpenCL: ouverte, nourrie et libérée sur le même fil toute sa vie. La cadence se compte en
-ticks et non en secondes d'horloge, parce qu'un client rejoue le ciel depuis la graine et que le même
-numéro de tick doit donner le même numéro de pas sur toutes les machines.
+ticks et non en secondes d'horloge, parce que la cadence doit garder le même sens sur une carte, sur
+un processeur et sur un serveur qui tourne en retard.
 
-### 5. Le réseau
+### 5. Le réseau, fait
 
-Le serveur tient la grille et l'avance. Il n'envoie pas les cellules, ce serait absurde en volume: il
-envoie la graine, les conditions au sol, le vent et l'heure, et chaque client rejoue la même
-simulation. Déterminisme strict des deux côtés, donc arithmétique identique et aucun flottant qui
-dépende de la machine. Un client qui arrive en cours de route reçoit un instantané compressé de la
-densité pour se resynchroniser.
+Cette phase devait envoyer la graine et faire rejouer la simulation à chaque client, au motif
+qu'envoyer les cellules serait absurde en volume. Le motif était faux de trois ordres de grandeur, et
+c'est une mesure qui l'a montré. Un champ de 442 368 cellules fait 1,7 Mo de flottants, mais un ciel
+est presque entièrement vide: une après-midi de beau temps a du nuage dans une cellule sur six cents
+et le reste tient un zéro exact, ce qui est exactement ce que deflate avale le mieux.
+
+Les chiffres, sur la grille visée. Beau temps: 3,1 ko emballé. Ciel couvert forcé, 9 % de cellules
+mouillées, ce qui est le pire que les options permettent: 85 ko. Grille 128, couvert: le même ordre.
+Contre un pas toutes les dix secondes, ça fait quelques centaines d'octets par seconde et par joueur.
+Le plafond d'un paquet Minecraft est à 1 Mo, donc il reste neuf fois la marge.
+
+Donc le serveur simule et le client reçoit. C'est moins de code qu'un rejeu, ça supprime la remise à
+niveau d'un joueur qui arrive une heure plus tard, et un client dont le pilote refuse de compiler le
+noyau voit exactement le même ciel que celui qui a une carte. La parité au bit de la phase 4 garde
+tout son intérêt: c'est elle qui autorise la carte à remplacer le processeur côté serveur.
+
+L'emballage tient en deux temps. Chaque valeur devient une fraction sur seize bits du pic du champ,
+ce qui divise la taille par deux parce que trois des quatre octets d'un flottant sont du bruit de
+mantisse que deflate ne peut pas modéliser. Puis le bloc entier est deflaté. Seize bits et non huit:
+un niveau sur huit bits vaut un cinquième d'épaisseur optique en travers d'une cellule sur un cumulus
+dense, ce qui se voit comme des marches sur le bord doux d'un nuage. L'écart mesuré au pire sur un
+vrai ciel est de 0,0008 % du pic.
+
+Le paquet se décrit lui-même: les tailles, l'arête de cellule et la cadence voyagent avec chaque
+champ. Trente octets sur un paquet de milliers, et ça supprime la machine à états d'une poignée de
+main. Rien à ordonner entre deux paquets, rien à renvoyer quand un opérateur recharge les options, et
+un client connaît la forme du ciel dès le premier paquet reçu.
+
+L'emballage coûte 15 ms au pire, donc il tourne sur le fil de calcul et pas sur le tick, et une fois
+par pas et non une fois par joueur. Un client qui se connecte reçoit les deux derniers champs, le plus
+vieux d'abord, pour avoir une paire à mélanger dès sa première image au lieu d'attendre le pas suivant.
+
+Vérifié sur un serveur dédié sans fenêtre avec un client connecté dessus: 808 pas, 808 champs envoyés,
+aucun saut, le plus gros à 4527 octets, et côté client une ligne nommant le pas reçu et la forme de la
+grille. Le mélange entre deux pas, la chute de la paire quand le ciel du serveur repart de zéro et le
+refus d'un paquet malformé ont chacun leur test.
 
 ### 6. Le rendu
 
@@ -207,6 +238,11 @@ aura déjà de quoi les porter.
 Les phases 1 et 2 sont courtes. La 3 est le gros morceau et ne se parallélise pas: tout en dépend.
 La 4 suit la 3. La 5 et la 6 peuvent avancer ensemble une fois la 3 finie, la 6 pouvant démarrer sur
 une grille remplie à la main avant que la 5 n'existe. La 7 ferme.
+
+Les phases 1 à 5 sont faites. La 6 commence sur un champ qui arrive déjà côté client, donc elle n'a
+plus rien à attendre. Un point à trancher en l'ouvrant: l'interopérabilité OpenCL et OpenGL est morte
+en chemin, puisque le champ traverse le réseau au lieu de rester sur la carte du serveur, donc le
+client téléverse une texture 3D depuis la mémoire hôte comme n'importe quel autre mod.
 
 ## Sources
 
