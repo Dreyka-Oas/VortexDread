@@ -1,8 +1,7 @@
 package oas.dreyka.vortexdread.atmosphere.cpu;
 
 import oas.dreyka.vortexdread.atmosphere.AtmosphereGrid;
-import oas.dreyka.vortexdread.atmosphere.AtmosphereProfile;
-import oas.dreyka.vortexdread.atmosphere.AtmosphereSettings;
+import oas.dreyka.vortexdread.atmosphere.SurfaceDrive;
 import oas.dreyka.vortexdread.atmosphere.ThermalNoise;
 
 /**
@@ -16,38 +15,20 @@ import oas.dreyka.vortexdread.atmosphere.ThermalNoise;
  * <p>The pattern drifts rather than flickering. A thermal that changed every step would seed nothing,
  * since a bubble needs to be fed for long enough to reach its condensation level.
  *
- * <p>What the ground hands over is a flux and not a value. Writing the target straight into the cells
- * makes the surface an infinite reservoir: a downdraft arriving with cold dry air is reset to warm and
- * damp the same step it lands, so the heat and the water keep coming however much the column has
- * already taken. Warm ground under air that is already that warm heats nothing, and the relaxation
- * below is what says so.
+ * <p>What the ground hands over is a flux and not a value, which {@link SurfaceDrive} says the reason for,
+ * along with the rest of the numbers this stage is driven by.
  */
 public final class SurfaceForcing {
 
     private final ThermalNoise noise;
-    private final float latticePerCell;
-    private final float secondsPerLattice;
-    private final float temperatureAmplitude;
-    private final float humidityAmplitude;
+    private final SurfaceDrive drive;
 
     /** Offsets the humidity pattern off the temperature one so the two are related without being equal. */
     private static final float HUMIDITY_OFFSET = 37.0f;
 
-    /**
-     * How long the lowest air takes to come most of the way to the ground's own state, in seconds.
-     *
-     * <p>Five minutes is the order of the real thing over a summer field, and it is slow enough that a
-     * thermal leaving carries away more than the ground can immediately replace, which is what makes
-     * convection come in bursts instead of one steady column.
-     */
-    private static final float RESPONSE_TIME = 300.0f;
-
-    public SurfaceForcing(AtmosphereSettings settings, long seed) {
-        this.noise = new ThermalNoise(seed);
-        this.latticePerCell = settings.cellSize() / settings.thermalWidth();
-        this.secondsPerLattice = 1.0f / settings.thermalPeriod();
-        this.temperatureAmplitude = settings.temperatureAmplitude();
-        this.humidityAmplitude = settings.humidityAmplitude();
+    public SurfaceForcing(SurfaceDrive drive) {
+        this.noise = new ThermalNoise(drive.seed());
+        this.drive = drive;
     }
 
     /**
@@ -59,21 +40,20 @@ public final class SurfaceForcing {
      *
      * @param elapsedSeconds simulated time since the start, which is what makes the pattern move
      */
-    public void apply(AtmosphereGrid grid, AtmosphereProfile profile, float elapsedSeconds,
-            float timeStep) {
-        float time = elapsedSeconds * secondsPerLattice;
-        float relaxation = Math.min(1.0f, timeStep / RESPONSE_TIME);
+    public void apply(AtmosphereGrid grid, float elapsedSeconds, float timeStep) {
+        float time = drive.time(elapsedSeconds);
+        float relaxation = drive.relaxation(timeStep);
 
         for (int z = 0; z < grid.sizeZ; z++) {
             for (int x = 0; x < grid.sizeX; x++) {
-                float latticeX = x * latticePerCell;
-                float latticeZ = z * latticePerCell;
+                float latticeX = x * drive.latticePerCell();
+                float latticeZ = z * drive.latticePerCell();
 
                 float warmth = noise.layered(latticeX, latticeZ, time, 3);
                 float damp = noise.layered(latticeX + HUMIDITY_OFFSET, latticeZ + HUMIDITY_OFFSET, time, 2);
 
-                float temperature = profile.surfaceTemperature + temperatureAmplitude * warmth;
-                float vapour = profile.surfaceVapour * (1.0f + humidityAmplitude * damp);
+                float temperature = drive.surfaceTemperature() + drive.temperatureAmplitude() * warmth;
+                float vapour = drive.surfaceVapour() * (1.0f + drive.humidityAmplitude() * damp);
                 if (vapour < 0.0f) {
                     vapour = 0.0f;
                 }

@@ -108,11 +108,12 @@ tasks.processResources {
     }
 }
 
-// OpenCL needs three nudges on Fedora, none of which needs root. Mesa's rusticl exposes no device
-// unless RUSTICL_ENABLE names the driver, it hides double precision behind RUSTICL_FEATURES even on a
-// card that has it, and the JOCL binding dlopens the unversioned libOpenCL.so, which ships only in the
-// -devel package. Short any one of them and the advection logs "no usable OpenCL device" on a machine
-// with a working card, and the launch looks fine while running the slow path.
+// OpenCL needs two nudges on Fedora, neither of which needs root. Mesa's rusticl exposes no device at all
+// unless RUSTICL_ENABLE names the driver, and the JOCL binding dlopens the unversioned libOpenCL.so, which
+// ships only in the -devel package. Short either one and the sky reports no usable device on a machine with a
+// working card, and the launch looks fine while running the slow path. Nothing asks for RUSTICL_FEATURES=fp64:
+// the solver is single precision throughout, and the double precision this card exposes is expanded in
+// software and rounds worse than the single precision divide it was meant to replace.
 val openClEnv: Map<String, String> = runCatching {
     val loader = listOf("/usr/lib64/libOpenCL.so.1", "/usr/lib/x86_64-linux-gnu/libOpenCL.so.1")
             .map { file(it) }
@@ -124,7 +125,6 @@ val openClEnv: Map<String, String> = runCatching {
     Files.createSymbolicLink(link, loader.toPath())
     mapOf(
             "RUSTICL_ENABLE" to (System.getenv("RUSTICL_ENABLE") ?: "radeonsi"),
-            "RUSTICL_FEATURES" to (System.getenv("RUSTICL_FEATURES") ?: "fp64"),
             "LD_LIBRARY_PATH" to listOfNotNull(dir.absolutePath, System.getenv("LD_LIBRARY_PATH"))
                     .joinToString(":")
     )
@@ -247,6 +247,11 @@ tasks.test {
     // .get() is required: systemProperty stringifies its argument at fork time, and handing it the
     // Provider itself would set a value that never equals "true".
     systemProperty("vd.bench", benchFlag.get())
+    // A bench whose table lands in the XML report and nowhere else has not been read. Only when asked for,
+    // since the ordinary suite printing every stream turns a green run into three screens of noise.
+    if (benchFlag.get() == "true") {
+        testLogging.showStandardStreams = true
+    }
 }
 
 // MIT obliges the notice to follow any substantial copy, and the same file carries the notice of the

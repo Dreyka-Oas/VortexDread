@@ -30,7 +30,7 @@ import oas.dreyka.vortexdread.atmosphere.cpu.SurfaceForcing;
  * and temperature are both settled, and rain after condensation, since only water that has already become
  * droplets can fall.
  */
-public final class Atmosphere {
+public final class Atmosphere implements SkySolver {
 
     private final AtmosphereSettings settings;
     private final AtmosphereGrid grid;
@@ -45,14 +45,16 @@ public final class Atmosphere {
         this.grid = settings.newGrid();
         this.profile = settings.newProfile();
         this.scratch = new AtmosphereScratch(grid.cellCount());
-        this.forcing = new SurfaceForcing(settings, seed);
+        this.forcing = new SurfaceForcing(SurfaceDrive.of(settings, profile, seed));
         this.profile.reset(grid);
     }
 
+    @Override
     public AtmosphereSettings settings() {
         return settings;
     }
 
+    @Override
     public AtmosphereGrid grid() {
         return grid;
     }
@@ -61,20 +63,33 @@ public final class Atmosphere {
         return profile;
     }
 
+    @Override
     public long stepsTaken() {
         return stepsTaken;
     }
 
     /** Simulated seconds since the first step. */
+    @Override
     public float elapsedSeconds() {
         return stepsTaken * settings.timeStep();
     }
 
+    @Override
+    public String description() {
+        return "processor";
+    }
+
+    /** Nothing to release: the arrays go when this does. Here so the two paths close the same way. */
+    @Override
+    public void close() {
+    }
+
     /** Advances the sky by one time step. */
+    @Override
     public void step() {
         float timeStep = settings.timeStep();
 
-        forcing.apply(grid, profile, elapsedSeconds(), timeStep);
+        forcing.apply(grid, elapsedSeconds(), timeStep);
         Advection.advect(grid, scratch, timeStep);
         Buoyancy.apply(grid, profile, timeStep);
         Boundaries.apply(grid, timeStep);
@@ -85,6 +100,7 @@ public final class Atmosphere {
         stepsTaken++;
     }
 
+    @Override
     public void step(int count) {
         for (int i = 0; i < count; i++) {
             step();

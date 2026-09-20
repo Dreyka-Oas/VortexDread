@@ -42,8 +42,13 @@ public final class Boundaries {
     private Boundaries() {
     }
 
+    /** The lowest row the band reaches, which the card path needs to know where to start its launch. */
+    public static int firstSpongeRow(int sizeY) {
+        return Math.max(1, sizeY - SPONGE_ROWS);
+    }
+
     public static void apply(AtmosphereGrid grid, float timeStep) {
-        int firstRow = Math.max(1, grid.sizeY - SPONGE_ROWS);
+        int firstRow = firstSpongeRow(grid.sizeY);
 
         for (int y = firstRow; y < grid.sizeY; y++) {
             float depth = (y - firstRow + 1) / (float) SPONGE_ROWS;

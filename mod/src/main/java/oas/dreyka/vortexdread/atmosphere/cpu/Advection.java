@@ -40,7 +40,7 @@ public final class Advection {
     }
 
     public static void advect(AtmosphereGrid grid, AtmosphereScratch scratch, float timeStep) {
-        int slices = slicesFor(grid, timeStep);
+        int slices = slicesFor(fastestFlow(grid), timeStep, grid.cellSize);
         float courant = timeStep / (slices * grid.cellSize);
 
         for (int slice = 0; slice < slices; slice++) {
@@ -59,20 +59,31 @@ public final class Advection {
     }
 
     /**
-     * How many slices the step needs, from the cell whose air is going somewhere fastest.
+     * How fast the air is going in the cell that is emptying fastest.
      *
      * <p>The three components are added rather than taken separately. What limits the scheme is the total
      * share of a cell that empties in one slice, and air leaving diagonally empties it through two faces
      * at once.
      */
-    private static int slicesFor(AtmosphereGrid grid, float timeStep) {
+    public static float fastestFlow(AtmosphereGrid grid) {
         float fastest = 0.0f;
         for (int index = 0; index < grid.cellCount(); index++) {
             float together = Math.abs(grid.velocityX[index]) + Math.abs(grid.velocityY[index])
                     + Math.abs(grid.velocityZ[index]);
             fastest = Math.max(fastest, together);
         }
-        float crossed = fastest * timeStep / grid.cellSize;
+        return fastest;
+    }
+
+    /**
+     * How many slices a step of this length needs, given that speed.
+     *
+     * <p>Taking the speed as an argument rather than the grid is what lets the card path use this rule
+     * instead of a copy of it: reducing a field to its maximum is the one thing a card is bad at and the one
+     * thing it has to do anyway, so it reduces and then asks here, and both paths slice the same.
+     */
+    public static int slicesFor(float fastest, float timeStep, float cellSize) {
+        float crossed = fastest * timeStep / cellSize;
         int wanted = (int) Math.ceil(crossed / COURANT_LIMIT);
         return Math.min(SLICE_CEILING, Math.max(1, wanted));
     }

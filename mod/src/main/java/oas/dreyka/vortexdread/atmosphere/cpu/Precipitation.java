@@ -35,10 +35,18 @@ public final class Precipitation {
     private Precipitation() {
     }
 
+    /**
+     * How much of the excess leaves in one step.
+     *
+     * <p>An explicit rate stepped past its own time constant removes more than there is, so the share is
+     * capped whatever the step size.
+     */
+    public static float shareFor(float timeStep) {
+        return Math.min(1.0f, AUTOCONVERSION_RATE * timeStep);
+    }
+
     public static void apply(AtmosphereGrid grid, float timeStep) {
-        // An explicit rate stepped past its own time constant removes more than there is, so the share
-        // taken in one step is capped whatever the step size.
-        float share = Math.min(1.0f, AUTOCONVERSION_RATE * timeStep);
+        float share = shareFor(timeStep);
 
         for (int index = 0; index < grid.cellCount(); index++) {
             float excess = grid.cloudWater[index] - AUTOCONVERSION_THRESHOLD;

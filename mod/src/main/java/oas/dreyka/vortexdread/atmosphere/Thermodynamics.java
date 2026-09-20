@@ -88,15 +88,16 @@ public final class Thermodynamics {
      * Saturation mixing ratio, kg of vapour per kg of dry air. Harris equation 6, a curve fit to the
      * standard tables accurate to 0.1 % between -30 and 30 C.
      *
-     * <p>StrictMath rather than Math because two machines replaying the same simulation have to agree
-     * bit for bit, and only the strict variant is specified to the last place.
+     * <p>Single precision throughout and {@link PortableMath#exp} rather than the library, because this is
+     * the one function in the simulation that runs per cell per step on both the processor and the card, and
+     * the two have to return the same bits. That class says what goes wrong when they do not.
      *
      * @param temperatureCelsius parcel temperature, C
      * @param pressurePascals environmental pressure at the cell, Pa
      */
     public static float saturationMixingRatio(float temperatureCelsius, float pressurePascals) {
-        double exponent = 17.67 * temperatureCelsius / (temperatureCelsius + 243.5);
-        return (float) (380.16 * StrictMath.exp(exponent) / pressurePascals);
+        float exponent = 17.67f * temperatureCelsius / (temperatureCelsius + 243.5f);
+        return 380.16f * PortableMath.exp(exponent) / pressurePascals;
     }
 
     /**
