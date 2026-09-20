@@ -105,4 +105,23 @@ public final class LookConfig {
      * Below about a third the cloud reads as cut out of stone, above about two thirds it goes flat.
      */
     public static float cloudSkyLight = 0.45f;
+
+    /**
+     * How much of the light a droplet catches carries on forward, nought to just under one.
+     *
+     * <p>This is what puts the bright rim on a cloud with the sun behind it and what makes the sky
+     * next to the sun glare. The honest figure for a water droplet is around eight tenths, which
+     * multiplies the light by forty-five when you look straight at the sun through thin cloud and
+     * blows the picture out. Six tenths keeps the effect and keeps the range.
+     */
+    public static float cloudForwardScatter = 0.6f;
+
+    /**
+     * How much comes straight back instead, as a negative pull.
+     *
+     * <p>Small and the other way round. It lights the cloud you look at with the sun over your own
+     * shoulder, which a forward lobe alone leaves dull. At nought the pair collapses to one lobe
+     * and that face goes flat again.
+     */
+    public static float cloudBackScatter = -0.15f;
 }

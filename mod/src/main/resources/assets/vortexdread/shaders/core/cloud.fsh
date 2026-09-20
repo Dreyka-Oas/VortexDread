@@ -3,6 +3,7 @@
 #moj_import <minecraft:projection.glsl>
 #moj_import <vortexdread:cloud_field.glsl>
 #moj_import <vortexdread:cloud_detail.glsl>
+#moj_import <vortexdread:cloud_light.glsl>
 
 in vec2 texCoord;
 
@@ -13,52 +14,9 @@ out vec4 fragColor;
 // to the altitudes that actually hold water, so the steps land in the cloud instead of around it.
 const int STEPS = 64;
 
-// Towards the sun. Six is enough because the steps double: the water in the first hundred metres
-// decides most of the answer and the water a kilometre away only has to be counted roughly.
-const int LIGHT_STEPS = 6;
-
-// Octaves of the multiple scattering approximation, and how much thinner and how much quieter each one
-// is than the last. Three is where everyone stops, because the fourth changes nothing anyone can see.
-const int OCTAVES = 3;
-const float THINNER = 0.5;
-const float QUIETER = 0.5;
-
 // Below this the cloud in front has swallowed everything behind and the rest of the march is arithmetic
 // on a number nobody will see.
 const float OPAQUE = 0.004;
-
-/**
- * How much of the sun reaches one point, by marching at it and counting the water in the way.
- *
- * Not one exponential but a sum of three, which is the cheap stand-in for multiple scattering. A
- * photon that bounced around inside the cloud before it left travelled through less extinction than a
- * straight line through the same water says it did, so each octave halves the extinction and halves
- * what it contributes. Without this every cloud comes out the colour of slate, because single
- * scattering under-counts by most of the light a real cloud sends back.
- */
-float sunReach(vec3 metres) {
-    float depth = 0.0;
-    float span = SunToward.w;
-    float along = 0.0;
-    for (int step = 0; step < LIGHT_STEPS; step++) {
-        depth += waterAt(metres + SunToward.xyz * (along + 0.5 * span)) * span;
-        along += span;
-        span *= 2.0;
-    }
-    float thickness = depth * VolumeCells.w;
-    float lit = 0.0;
-    float total = 0.0;
-    float thinner = 1.0;
-    float quieter = 1.0;
-    for (int octave = 0; octave < OCTAVES; octave++) {
-        lit += quieter * exp(-thickness * thinner);
-        total += quieter;
-        thinner *= THINNER;
-        quieter *= QUIETER;
-    }
-    // Divided back out so a point the sun reaches unobstructed gets exactly the light that falls on it.
-    return lit / total;
-}
 
 /**
  * A different starting offset for every pixel, nought to one.
@@ -99,6 +57,10 @@ void main() {
         discard;
     }
 
+    // Once per pixel and not once per step: the lobe only depends on the angle between the view and
+    // the sun, and that angle is the same the whole way down a straight ray.
+    float phase = phaseAt(ray);
+
     // Beer and Lambert down the view, and the same again at each step towards the sun.
     float span = (leave - enter) / float(STEPS);
     float start = enter + dither(gl_FragCoord.xy) * span;
@@ -117,7 +79,10 @@ void main() {
         // here and not how finely this frame chose to sample it. Over a step it would change the look
         // of the sky every time the quality setting moved.
         float powder = 1.0 - exp(-2.0 * water * VolumeCells.w * CameraInVolume.w);
-        vec3 lit = SunLight.rgb * sunReach(at) * mix(1.0, powder, SunLight.w) + SkyLight.rgb;
+        // The lobe applies to the sun and not to the sky. One comes from a direction, so how the
+        // droplet redirects it depends on where you stand; the other arrives from everywhere at
+        // once and comes out the same whichever way you look.
+        vec3 lit = SunLight.rgb * sunReach(at) * mix(1.0, powder, SunLight.w) * phase + SkyLight.rgb;
         // The exact integral over the step rather than a rectangle at its middle, which is what stops
         // a coarse march from drawing the cloud in bands of its own step size.
         scattered += transmittance * lit * (1.0 - stepThrough);
