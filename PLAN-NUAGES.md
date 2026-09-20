@@ -260,31 +260,71 @@ d'une cellule de chaque côté pour la pente du mélange vertical. Ça change to
 quelques centaines de mètres d'un volume de trois kilomètres, donc soixante-quatre pas étalés sur le
 tout traversaient le nuage en deux, et c'est ce qui le découpait en lamelles.
 
+L'érosion sous la taille de cellule est faite, et pas sous la forme annoncée. Worley coûte
+vingt-sept distances de voisins par échantillon, ce que la marche ne paie pas; à sa place, deux
+octaves de bruit en bourrelet, la valeur repliée en son milieu pour que des collines lisses
+deviennent des crêtes. Le pas de fréquence est deux virgule dix-sept et non deux, sans quoi chaque
+octave retombe sur le treillis du précédent et les coins s'empilent en grille visible.
+
+Trois choses se sont apprises en la réglant, et chacune a coûté un essai.
+
+La première est la forme de la morsure. Retirer le bruit proportionnellement à `1 - eau/pic` donne un
+seuil et non une érosion: le champ est optiquement mince presque partout, une cellule à un dixième du
+pic est le cas courant plutôt que le bord ténu, et la morsure moyenne dépasse alors ce qu'il y a à
+mordre. Mesuré avant l'essai puis confirmé à l'image, tout ce qui était sous un cinquième du pic
+disparaissait entièrement, quel que soit le bruit. La correction est de travailler sur la racine de
+la fraction, qui est aussi l'échelle que l'atlas stocke, ce qui rend l'opération neutre là où le
+bruit ne mord pas.
+
+La deuxième est la longueur d'onde, qui a un plancher et pas seulement un plafond. Soixante-quatre
+pas étalés sur une pente de deux ou trois kilomètres tombent à quarante ou cinquante mètres l'un de
+l'autre, donc une onde sous cent mètres n'est pas échantillonnée deux fois par période et revient en
+scintillement. Quatre-vingt-seize mètres, une onde et demie par cellule, et deux octaves au lieu de
+trois pour la même raison.
+
+La troisième est que la config du monde de test écrase les valeurs par défaut du code. Un essai
+entier a mesuré d'anciens nombres pendant que la source en portait de nouveaux. Avant toute mesure,
+lire `run/config/oas/vortexdread.json`, et se souvenir que `--both` en a deux, le client dans
+`run/config` et le serveur dédié dans `run/server/config`.
+
 Reste à faire, dans cet ordre:
 
 - diffusion avant par Henyey-Greenstein à deux lobes, un pour le halo solaire, un pour les bords
   d'argent, sans quoi un coucher de soleil ne donne rien;
-- érosion par bruit Worley-Perlin sous la taille de cellule;
 - demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage;
-- réglage bas, moyen, haut dans la config, le haut visant la 9060 XT et le bas une machine modeste.
+- réglage bas, moyen, haut dans la config, le bas visant une machine modeste.
 
 Deux mesures qui ne concernent pas le rendu mais que le rendu a rendues visibles.
 
 L'extinction de cent par unité de rapport de mélange et par mètre est la bonne valeur physique: un
 vrai cumulus porte environ quatre dixièmes de gramme d'eau par kilogramme d'air et devient opaque en
-vingt-cinq mètres. La simulation plafonne quinze fois plus bas, donc le ciel dessiné est trop mince.
-C'est un défaut de la physique, et le corriger en montant l'extinction serait masquer la mesure.
+vingt-cinq mètres. Un premier relevé donnait quinze fois moins et laissait croire à un défaut de la
+physique. Un relevé plus tardif, au pas cent seize plutôt qu'au pas cent huit, donne quatre
+dixièmes de millième, exactement la valeur réelle, sur une bande mouillée de quatre couches au lieu
+de deux. Le champ atteint donc bien la bonne densité, il lui faut seulement le temps que la
+convection monte. Ce qu'il faut en retenir est méthodologique: une mesure prise sur un ciel encore
+jeune décrit le ciel jeune et rien d'autre.
 
-Le nuage ténu se dessine en treillis de points réguliers, un par cellule. Ce n'est pas le filtrage,
-qui est déjà adouci, ni la quantification, que l'échelle racine a réglée: une mesure du champ donne
-seize dixièmes de millième de cellules mouillées, soit une quinzaine par couche de neuf mille, donc
-des cellules isolées. Le marcheur dessine fidèlement un champ pointillé. La preuve est que le
-treillis n'apparaît jamais dans le nuage dense, seulement là où les cellules sont seules. L'érosion
-par bruit sous la taille de cellule est le correctif prévu et c'est le chantier suivant.
+Le treillis de points réguliers a disparu avec l'érosion. Il n'était ni le filtrage ni la
+quantification mais le champ lui-même, mesuré à seize dixièmes de millième de cellules mouillées,
+soit une quinzaine par couche de neuf mille, donc des cellules isolées que le marcheur dessinait
+fidèlement en billes lisses. Deux octaves de bourrelet à quatre-vingt-seize mètres les cassent en
+lambeaux et le ciel ressemble enfin à un champ de cumulus de beau temps.
 
-Le coût: soixante images par seconde en moyenne, mais le centile bas tombe à onze à midi, quand la
-marche vers le soleil part de presque tous les échantillons. La demi-résolution est la réponse, et
-elle est déjà sur la liste.
+Reste un rayage fin qui n'est pas celui-là et qu'il ne faut pas confondre avec lui. Il ne touche que
+les nuages lointains, suit la direction des rayons projetée à l'écran, et laisse intacts les nuages
+sous la caméra. C'est la marche qui s'allonge: le pas vaut la traversée divisée par soixante-quatre,
+donc il grandit avec l'obliquité, et le tramage par pixel convertit la bande en filet plutôt que de
+la supprimer. Le hachage du bruit a été corrigé au passage pour une raison indépendante, un produit
+à trois termes qui ne laissait que six bits de mantisse et donc soixante-quatre valeurs distinctes,
+mais cette correction n'a rien changé au rayage, ce qui écarte le bruit comme cause. La réponse est
+la demi-résolution, qui paie les pas manquants, et elle est déjà sur la liste.
+
+Le coût, mesuré sur la RX 570 et non sur la 9060 XT, puisque c'est la carte des essais: quarante-neuf
+images par seconde au sol à midi, cinquante-neuf vu de mille blocs, centile bas à huit et seize
+respectivement. À lire en sachant que cette carte tient sur une seule ligne PCIe et que l'écran est
+piloté par l'autre, donc chaque image finie retraverse ce fil avant d'être affichée. Le chiffre
+mesure le couple carte plus fil, ce qui est justement ce qu'une machine modeste subit.
 
 Une leçon de la première vérification, qui coûte une heure à qui la répète: le client de test a Photon
 actif dans Iris. Trois captures de ciel volumétrique convaincant plus tard, c'était le sien, et ses
