@@ -238,14 +238,53 @@ et jamais trois: la règle std140 donne à un membre de trois la place de quatre
 démarrer dans le quart restant, et savoir si le code qui remplit le tampon est d'accord là-dessus est
 une question à deux réponses selon le pilote.
 
-Reste à faire, dans cet ordre, chacun étant un facteur sur le nombre que la boucle actuelle produit:
+La lumière est faite. À chaque échantillon mouillé, une seconde marche part vers le soleil, six pas
+qui doublent de longueur, et compte l'eau en travers. La position du soleil, la couleur de la lumière
+et celle du ciel viennent toutes de la sonde d'environnement de la caméra, donc un nuage vire à
+l'orange au crépuscule parce que le monde a viré, pas parce qu'un fichier l'a décidé.
 
-- absorption complétée par le terme Powder de Horizon Zero Dawn, qui corrige les nuages trop sombres;
+Trois corrections viennent avec, et chacune répare une chose que l'absorption seule rate:
+
+- le terme Powder de Horizon Zero Dawn. Un vrai nuage s'assombrit vers son bord, parce qu'un bord
+  mince n'a pas assez d'eau pour renvoyer la lumière; l'absorption seule fait exactement l'inverse et
+  éclaire le bord plus que le coeur.
+- l'approximation de la diffusion multiple, trois octaves qui divisent l'extinction et le poids par
+  deux à chaque fois. Sans elle tout nuage sort couleur ardoise, parce que la diffusion simple
+  ignore la plus grande partie de la lumière qu'un vrai nuage renvoie.
+- l'intégrale exacte sur le pas plutôt qu'un rectangle en son milieu, et un décalage de départ par
+  pixel tiré d'un bruit à gradient entrelacé. Le premier empêche une marche grossière de dessiner ses
+  propres bandes, le second transforme la limite de pas en grain.
+
+La marche est aussi bornée aux altitudes qui portent de l'eau, calculées à l'emballage, élargies
+d'une cellule de chaque côté pour la pente du mélange vertical. Ça change tout: un nuage occupe
+quelques centaines de mètres d'un volume de trois kilomètres, donc soixante-quatre pas étalés sur le
+tout traversaient le nuage en deux, et c'est ce qui le découpait en lamelles.
+
+Reste à faire, dans cet ordre:
+
 - diffusion avant par Henyey-Greenstein à deux lobes, un pour le halo solaire, un pour les bords
   d'argent, sans quoi un coucher de soleil ne donne rien;
 - érosion par bruit Worley-Perlin sous la taille de cellule;
 - demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage;
 - réglage bas, moyen, haut dans la config, le haut visant la 9060 XT et le bas une machine modeste.
+
+Deux mesures qui ne concernent pas le rendu mais que le rendu a rendues visibles.
+
+L'extinction de cent par unité de rapport de mélange et par mètre est la bonne valeur physique: un
+vrai cumulus porte environ quatre dixièmes de gramme d'eau par kilogramme d'air et devient opaque en
+vingt-cinq mètres. La simulation plafonne quinze fois plus bas, donc le ciel dessiné est trop mince.
+C'est un défaut de la physique, et le corriger en montant l'extinction serait masquer la mesure.
+
+Le nuage ténu se dessine en treillis de points réguliers, un par cellule. Ce n'est pas le filtrage,
+qui est déjà adouci, ni la quantification, que l'échelle racine a réglée: une mesure du champ donne
+seize dixièmes de millième de cellules mouillées, soit une quinzaine par couche de neuf mille, donc
+des cellules isolées. Le marcheur dessine fidèlement un champ pointillé. La preuve est que le
+treillis n'apparaît jamais dans le nuage dense, seulement là où les cellules sont seules. L'érosion
+par bruit sous la taille de cellule est le correctif prévu et c'est le chantier suivant.
+
+Le coût: soixante images par seconde en moyenne, mais le centile bas tombe à onze à midi, quand la
+marche vers le soleil part de presque tous les échantillons. La demi-résolution est la réponse, et
+elle est déjà sur la liste.
 
 Une leçon de la première vérification, qui coûte une heure à qui la répète: le client de test a Photon
 actif dans Iris. Trois captures de ciel volumétrique convaincant plus tard, c'était le sien, et ses
