@@ -69,6 +69,32 @@ public final class LookConfig {
      */
     public static float cloudPowder = 0.5f;
 
+    /**
+     * How long one wave of the detail is, metres.
+     *
+     * <p>Not a fraction of a cell: at exactly a half or a third the detail's lattice lines up with
+     * the simulation's and draws the grid it is here to break. And not much shorter than the march
+     * samples either, which is what sets the floor. Sixty-four steps spread over a slant of two or
+     * three kilometres land forty to fifty metres apart, so a wave under a hundred metres is being
+     * sampled below twice a wave and comes back as sparkle rather than as shape. Ninety-six metres
+     * is a wave and a half per cell, above that floor and dividing nothing.
+     */
+    public static float cloudDetailMetres = 96.0f;
+
+    /**
+     * How hard the detail eats into the field, nought to one.
+     *
+     * <p>Nothing about the simulation is wrong at sixty-four metres, it simply has no opinion under
+     * that, and a lone wet cell drawn faithfully is a smooth ball the width of a football pitch. The
+     * bite grows as the cell gets fainter, so a dense core keeps its shape and an edge breaks into
+     * wisps. At nought the sky goes back to the grid it came on.
+     *
+     * <p>Under a half rather than over it. Past that the middle of the range stops being a range: a
+     * cell holding a tenth of the peak goes from surviving where the noise is quiet to gone
+     * everywhere else, and an erosion with no middle is the grid again with holes in it.
+     */
+    public static float cloudErosion = 0.45f;
+
     /** How bright the sun makes the face it reaches, against the game's own daylight colour. */
     public static float cloudSunLight = 1.0f;
 

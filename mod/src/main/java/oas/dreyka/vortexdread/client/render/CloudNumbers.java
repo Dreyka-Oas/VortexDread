@@ -15,7 +15,7 @@ import org.joml.Vector3fc;
 /**
  * The handful of numbers one frame hands the program, and the buffer they travel in.
  *
- * <p>Ten slots of four floats, in the order {@code cloud_field.glsl} declares them. Four floats each and
+ * <p>Eleven slots of four floats, in the order {@code cloud_field.glsl} declares them. Four floats each and
  * never three: the rule that lays a uniform block out in memory gives a three float member the room of four
  * but lets the next member start in the leftover quarter, and whether the code filling the buffer agrees
  * about that is a question with two answers on two drivers. A block of nothing but four float slots has one.
@@ -26,7 +26,7 @@ import org.joml.Vector3fc;
  */
 public final class CloudNumbers implements AutoCloseable {
 
-    private static final int SLOTS = 10;
+    private static final int SLOTS = 11;
 
     private static final int BYTES = size();
 
@@ -65,7 +65,9 @@ public final class CloudNumbers implements AutoCloseable {
                     .putVec4(light.sun().x(), light.sun().y(), light.sun().z(),
                             LookConfig.cloudPowder)
                     .putVec4(light.sky().x(), light.sky().y(), light.sky().z(), 0.0f)
-                    .putVec4(floorOfBand(volume, sky), ceilingOfBand(volume, sky), 0.0f, 0.0f);
+                    .putVec4(floorOfBand(volume, sky), ceilingOfBand(volume, sky), 0.0f, 0.0f)
+                    .putVec4(1.0f / Math.max(1.0f, LookConfig.cloudDetailMetres),
+                            LookConfig.cloudErosion, 0.0f, 0.0f);
         }
         return buffer;
     }

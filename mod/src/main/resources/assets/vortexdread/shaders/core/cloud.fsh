@@ -2,6 +2,7 @@
 
 #moj_import <minecraft:projection.glsl>
 #moj_import <vortexdread:cloud_field.glsl>
+#moj_import <vortexdread:cloud_detail.glsl>
 
 in vec2 texCoord;
 
@@ -105,7 +106,9 @@ void main() {
     vec3 scattered = vec3(0.0);
     for (int step = 0; step < STEPS; step++) {
         vec3 at = CameraInVolume.xyz + ray * (start + float(step) * span);
-        float water = waterAt(at);
+        // Eroded down the view but not towards the sun: the shadow a cloud casts on itself is a low
+        // frequency thing, and paying for the detail seven times over would not change it.
+        float water = eroded(waterAt(at), CameraLeft.w, at);
         if (water <= 0.0) {
             continue;
         }
