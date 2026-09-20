@@ -1,0 +1,83 @@
+package oas.dreyka.vortexdread.init;
+
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import oas.dreyka.vortexdread.VortexDread;
+import oas.dreyka.vortexdread.atmosphere.Atmosphere;
+import oas.dreyka.vortexdread.atmosphere.AtmosphereSettings;
+import oas.dreyka.vortexdread.atmosphere.SkyRunner;
+import oas.dreyka.vortexdread.atmosphere.SkySolver;
+import oas.dreyka.vortexdread.atmosphere.gpu.GpuAtmosphere;
+import oas.dreyka.vortexdread.config.SkyConfig;
+
+/**
+ * The sky the server owns: opened with the world, stepped with the tick, released with the shutdown.
+ *
+ * <p>One per server rather than one per dimension. The simulation models a patch of troposphere with a seed
+ * and a clock, and which dimension a player is standing in does not change the weather over the overworld.
+ *
+ * <p>The seed is the world's own, so a world reopened tomorrow gets the sky it had, and every client that
+ * joins derives the same one without a byte of cloud crossing the network.
+ */
+public final class SkyInit {
+
+    private static SkyRunner runner;
+
+    private SkyInit() {
+    }
+
+    public static void register() {
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            long seed = server.overworld().getSeed();
+            AtmosphereSettings settings = SkyConfig.settings();
+            runner = new SkyRunner(() -> open(settings, seed), SkyConfig.ticksPerStep());
+        });
+
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (runner == null) {
+                return;
+            }
+            runner.onTick();
+            // Logged from here rather than from the worker, which is what makes this the line the rule asks
+            // for: it comes off the server thread, so it appears on a dedicated server with no window at all.
+            String notice = runner.takeNotice();
+            if (notice != null) {
+                VortexDread.LOGGER.info("[VortexDread] sky on {}, one step every {} ticks", notice,
+                        SkyConfig.ticksPerStep());
+            }
+        });
+
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            if (runner == null) {
+                return;
+            }
+            // The count rather than a farewell. It is the one number that says the sky kept up: divide it by
+            // how long the world was open and compare against the cadence, and a sky that spent the session
+            // skipping shows as a count well under what the ticks bought.
+            VortexDread.LOGGER.info("[VortexDread] sky stepped {} times", runner.stepsTaken());
+            runner.close();
+            runner = null;
+        });
+    }
+
+    /**
+     * The card when one answers and the operator wants it, the processor otherwise.
+     *
+     * <p>Catching everything and falling back is the only sane behaviour here, since a missing driver, a
+     * refused build and a card already busy all arrive as different exceptions and all mean the same thing.
+     * What makes the fallback honest is that it says so: the reason travels in the line the server logs, so a
+     * machine quietly running three hundred times slower is a machine that said why on the way past.
+     */
+    private static SkySolver open(AtmosphereSettings settings, long seed) {
+        if (!SkyConfig.useGraphicsCard) {
+            VortexDread.LOGGER.info("[VortexDread] useGraphicsCard is off, so the processor takes the sky");
+            return new Atmosphere(settings, seed);
+        }
+        try {
+            return new GpuAtmosphere(settings, seed, SkyConfig.graphicsCardIndex);
+        } catch (RuntimeException | UnsatisfiedLinkError noCard) {
+            VortexDread.LOGGER.warn("[VortexDread] no graphics card took the sky: {}", noCard.getMessage());
+            return new Atmosphere(settings, seed);
+        }
+    }
+}

@@ -2,6 +2,10 @@ package oas.dreyka.vortexdread;
 
 import net.fabricmc.api.ModInitializer;
 import oas.dreyka.vortexdread.init.BootstrapInit;
+import oas.dreyka.vortexdread.init.SkyInit;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The mod, on both sides.
@@ -13,8 +17,11 @@ public final class VortexDread implements ModInitializer {
 
     public static final String ID = "vortexdread";
 
+    public static final Logger LOGGER = LoggerFactory.getLogger("VortexDread");
+
     @Override
     public void onInitialize() {
         BootstrapInit.run();
+        SkyInit.register();
     }
 }
