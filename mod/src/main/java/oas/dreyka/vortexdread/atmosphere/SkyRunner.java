@@ -34,8 +34,15 @@ public final class SkyRunner implements AutoCloseable {
     private final AtomicReference<String> unreadNotice = new AtomicReference<>();
 
     private volatile SkySolver solver;
+    private volatile SkySnapshot current;
+    private volatile SkySnapshot previous;
     private Future<?> inFlight;
     private long ticks;
+
+    // Read by whatever thread draws, so volatile. The tick a step was launched on rather than the tick it
+    // landed on: that one is a multiple of the cadence on every machine, where the landing moves with the
+    // hardware, and a renderer that paced itself off the landing would run a different clock on every box.
+    private volatile long ticksAtLastStep;
 
     /**
      * @param open builds the solver, on the worker thread. It has to answer rather than throw: the choice
@@ -65,11 +72,34 @@ public final class SkyRunner implements AutoCloseable {
             // so rather than queueing up a backlog the sky quietly runs slow and the clock keeps its meaning.
             return;
         }
-        SkySolver current = solver;
-        if (current == null || ticks % ticksPerStep != 0) {
+        SkySolver sky = solver;
+        if (sky == null || ticks % ticksPerStep != 0) {
             return;
         }
-        inFlight = worker.submit((Runnable) current::step);
+        ticksAtLastStep = ticks;
+        inFlight = worker.submit(() -> {
+            sky.step();
+            publish(sky);
+        });
+    }
+
+    /**
+     * The two most recent steps, or null until the second one lands, and the fraction of the way between them.
+     *
+     * <p>Read from any thread. What makes that safe is that a snapshot is never written after it is published
+     * and the reference is volatile, so a reader either sees the old pair whole or the new pair whole.
+     *
+     * <p>The fraction is worked out from the tick the caller is on rather than kept here, because a renderer
+     * asks for it mid-frame between two ticks and only it knows how far through the tick it is.
+     */
+    public SkyView view(long tick, float partialTick) {
+        SkySnapshot newest = current;
+        SkySnapshot older = previous;
+        if (newest == null || older == null) {
+            return null;
+        }
+        float elapsed = tick + partialTick - ticksAtLastStep;
+        return new SkyView(older, newest, Math.min(1.0f, Math.max(0.0f, elapsed / ticksPerStep)));
     }
 
     /**
@@ -84,17 +114,17 @@ public final class SkyRunner implements AutoCloseable {
     }
 
     public long stepsTaken() {
-        SkySolver current = solver;
-        return current == null ? 0L : current.stepsTaken();
+        SkySolver sky = solver;
+        return sky == null ? 0L : sky.stepsTaken();
     }
 
     @Override
     public void close() {
         worker.submit(() -> {
-            SkySolver current = solver;
+            SkySolver sky = solver;
             solver = null;
-            if (current != null) {
-                current.close();
+            if (sky != null) {
+                sky.close();
             }
         });
         worker.shutdown();
@@ -103,6 +133,14 @@ public final class SkyRunner implements AutoCloseable {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    // Only ever called from the worker, right after the step it describes, and the order of the two writes
+    // matters: previous first, so a reader that catches the pair mid-rotation sees two steps that follow each
+    // other rather than the same one twice.
+    private void publish(SkySolver sky) {
+        previous = current;
+        current = SkySnapshot.of(sky.grid(), sky.stepsTaken());
     }
 
     // A task that threw leaves the future done and the solver as it was, so without this the sky would go
