@@ -99,7 +99,7 @@ Et c'est là qu'est la vraie trouvaille, qui est une contrainte pour la phase 6 
 celle-ci. Sous Iris le ciel est plein de nuages volumétriques, et ce sont ceux du pack, dessinés dans
 ses propres shaders. Aucun accrochage côté mod ne les annule. Un joueur sous pack de shaders aura donc
 deux ciels superposés tant que la phase 6 ne traite pas le cas, et c'est exactement ce à quoi servait
-le dossier `patches/photon/` de l'ancien mod.
+le dossier `patches/photon/` de l'ancien mod. Traité en phase 6, voir plus bas.
 
 ### 3. La grille d'atmosphère, faite
 
@@ -312,11 +312,25 @@ profondeur sur laquelle il s'ombre lui-même. Les seconds doublent leur portée 
 leur nombre fixe une distance et non une finesse: quatre voient les sept cent cinquante premiers
 mètres d'eau, huit en voient près de treize mille.
 
-Reste à faire, dans cet ordre:
+Sous un pack de shaders, le mod s'efface. La mesure qui a tranché: avec Photon actif, le passage du
+mod s'exécute quand même, et Iris le dit lui-même, `Missing program vortexdread:pipeline/cloud in
+override list`. Autrement dit le pack intercepte la création du pipeline, ne trouve aucun programme
+de remplacement pour le nôtre, et laisse passer une version que ses propres passes d'après vont
+traiter comme de la géométrie ordinaire, par-dessus les nuages volumétriques qu'il dessine déjà.
 
-- demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage;
-- la collision avec les paquets de shaders, dont `patches/photon/` de l'ancien mod est le
-  précédent.
+Le choix retenu est le retrait plutôt qu'un correctif par pack. Un correctif rend le plus beau
+résultat, c'est ce que faisait `patches/photon/`, mais il faut l'écrire et le maintenir pack par pack
+et il modifie des fichiers dans le dossier du joueur. Le retrait tient en une question posée une fois
+par image, à travers `IrisApi.isShaderPackInUse` atteint par réflexion pour ne pas compiler contre un
+mod que presque personne n'a. Le nom du paquet a changé une fois, donc les deux sont essayés, et une
+recherche qui échoue vaut absence: refuser de dessiner sur un doute rendrait le ciel à personne.
+
+Les deux accrochages demandent, pas seulement le nôtre. Annuler le passage de nuages vanilla sous un
+pack laisserait sans aucun nuage le joueur dont le pack lit cette géométrie. Et une ligne de journal
+part à chaque changement d'état, parce que sinon le joueur voit les nuages du pack, croit voir les
+nôtres, et ouvre son rapport de bug contre la mauvaise moitié de son jeu.
+
+Reste à faire: demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage.
 
 Deux mesures qui ne concernent pas le rendu mais que le rendu a rendues visibles.
 
