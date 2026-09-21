@@ -3,6 +3,8 @@ package oas.dreyka.vortexdread.client;
 import oas.dreyka.vortexdread.atmosphere.SkyFeed;
 import oas.dreyka.vortexdread.atmosphere.SkySnapshot;
 import oas.dreyka.vortexdread.atmosphere.SkyView;
+import oas.dreyka.vortexdread.weather.RainMap;
+import oas.dreyka.vortexdread.weather.RainReport;
 
 /**
  * The sky as this client knows it: the last two steps the server sent, and the clock between them.
@@ -17,6 +19,7 @@ import oas.dreyka.vortexdread.atmosphere.SkyView;
 public final class ClientSky {
 
     private final SkyFeed feed = new SkyFeed();
+    private final RainReport rain = new RainReport();
 
     private long ticks;
 
@@ -27,6 +30,20 @@ public final class ClientSky {
     /** Called on the client thread when a field arrives. */
     public void accept(SkySnapshot sky, int cadence) {
         feed.offer(sky, ticks, cadence);
+        // Summed here rather than per frame: it is one pass over the field, which costs about what unpacking
+        // it already cost, and the answer only changes when a new field lands.
+        rain.take(sky);
+    }
+
+    /**
+     * Where it rains, for the particles and the sound.
+     *
+     * <p>Built from the same field the server built its own from, so a client asking whether it rains on a
+     * block gets the server's answer without a packet for it. That is what the field travelling whole buys:
+     * the weather is not a state to synchronise, it is a reading of something both sides already hold.
+     */
+    public RainMap rain() {
+        return rain.map();
     }
 
     public SkyView view(float partialTick) {
@@ -41,5 +58,6 @@ public final class ClientSky {
     /** Dropped when the connection goes, so a second world does not open on the first one's clouds. */
     public void forget() {
         feed.forget();
+        rain.forget();
     }
 }

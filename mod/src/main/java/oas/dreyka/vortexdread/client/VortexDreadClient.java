@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import oas.dreyka.vortexdread.VortexDread;
 import oas.dreyka.vortexdread.client.render.CloudPass;
 import oas.dreyka.vortexdread.net.SkyFieldPayload;
+import oas.dreyka.vortexdread.weather.Rain;
 
 /**
  * The client side, which is where the sky gets drawn.
@@ -26,6 +27,8 @@ public final class VortexDreadClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        Rain.onClient(sky::rain);
+
         // Off the network thread and onto the client one: unpacking allocates a field and the renderer reads
         // it, so both have to happen where the renderer looks.
         ClientPlayNetworking.registerGlobalReceiver(SkyFieldPayload.TYPE,

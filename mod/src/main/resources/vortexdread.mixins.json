@@ -5,8 +5,11 @@
   "injectors": {
     "defaultRequire": 1
   },
-  "mixins": [],
+  "mixins": [
+    "LevelRainMixin"
+  ],
   "client": [
-    "client.LevelRendererMixin"
+    "client.LevelRendererMixin",
+    "client.WeatherEffectRendererMixin"
   ]
 }

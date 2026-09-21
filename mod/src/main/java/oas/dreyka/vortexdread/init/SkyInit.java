@@ -15,6 +15,9 @@ import oas.dreyka.vortexdread.net.SkyFieldPayload;
 import oas.dreyka.vortexdread.save.SkyPersistence;
 import oas.dreyka.vortexdread.save.SkySavedData;
 import oas.dreyka.vortexdread.save.SkyState;
+import oas.dreyka.vortexdread.weather.Rain;
+import oas.dreyka.vortexdread.weather.RainDriver;
+import oas.dreyka.vortexdread.weather.RainReport;
 
 /**
  * The sky the server owns: opened with the world, stepped with the tick, released with the shutdown.
@@ -29,6 +32,8 @@ import oas.dreyka.vortexdread.save.SkyState;
 public final class SkyInit {
 
     private static final SkyBroadcast broadcast = new SkyBroadcast();
+    private static final RainReport rain = new RainReport();
+    private static final RainDriver driver = new RainDriver(rain);
 
     private static SkyRunner runner;
 
@@ -37,6 +42,7 @@ public final class SkyInit {
 
     public static void register() {
         SkyFieldPayload.register();
+        Rain.onServer(rain::map);
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             long seed = server.overworld().getSeed();
@@ -47,7 +53,10 @@ public final class SkyInit {
             // the solver is the expensive half and that happens inside the supplier, on the worker.
             SkyState saved = SkySavedData.read(server);
             runner = new SkyRunner(() -> SkyPersistence.resume(open(settings, seed), saved, settings),
-                    cadence, sky -> broadcast.pack(sky, cadence));
+                    cadence, sky -> {
+                        broadcast.pack(sky, cadence);
+                        rain.take(sky);
+                    });
         });
 
         // The game's own save, which fires on autosave and again on the way down, since stopServer saves
@@ -69,6 +78,7 @@ public final class SkyInit {
             }
             runner.onTick();
             broadcast.onTick(server);
+            driver.onTick(server);
             // Logged from here rather than from the worker, which is what makes this the line the rule asks
             // for: it comes off the server thread, so it appears on a dedicated server with no window at all.
             String notice = runner.takeNotice();
@@ -93,6 +103,8 @@ public final class SkyInit {
             runner.close();
             runner = null;
             broadcast.forget();
+            rain.forget();
+            driver.forget();
         });
     }
 
