@@ -29,6 +29,9 @@ import oas.dreyka.vortexdread.client.VortexDreadClient;
  * <p>The pass is added to the frame graph rather than drawn on the spot, so the game decides when it runs
  * and against which copy of the main target. Declaring the target as both read and written is what puts it
  * after the sky, since the graph orders passes by what they touch.
+ *
+ * <p>One pass or two, by the reduction factor: at one the march writes the main target, above one a
+ * smaller one that {@link CloudEnlarge} stretches over it.
  */
 public final class CloudPass {
 
@@ -50,9 +53,8 @@ public final class CloudPass {
             return;
         }
         FramePass pass = builder.addPass("vortexdread_clouds");
-        targets.main = pass.readsAndWrites(targets.main);
-        ResourceHandle<RenderTarget> main = targets.main;
-        pass.executes(() -> draw(main.get(), camera, view));
+        ResourceHandle<RenderTarget> marched = CloudEnlarge.marchInto(builder, pass, targets);
+        pass.executes(() -> draw(marched.get(), camera, view));
     }
 
     /** Dropped with the world, since the next one may not have a sky of the same shape. */

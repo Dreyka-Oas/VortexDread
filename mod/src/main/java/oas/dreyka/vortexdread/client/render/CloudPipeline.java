@@ -34,6 +34,9 @@ public final class CloudPipeline {
     public static final String OLDER = "CloudsFrom";
     public static final String NEWER = "CloudsTo";
 
+    /** The reduced sky, as the enlargement reads it. */
+    public static final String SMALL = "CloudSmall";
+
     public static final RenderPipeline SKY = RenderPipeline.builder()
             .withLocation(VortexDread.id("pipeline/cloud"))
             .withVertexShader("core/screenquad")
@@ -41,6 +44,26 @@ public final class CloudPipeline {
             .withSampler(OLDER)
             .withSampler(NEWER)
             .withUniform(UNIFORM, UniformType.UNIFORM_BUFFER)
+            .withBlend(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA)
+            .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+            .withDepthWrite(false)
+            .withCull(false)
+            .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
+            .build();
+
+    /**
+     * The reduced sky laid over the main target, blended the way the march itself would have been.
+     *
+     * <p>The blend moves here rather than staying on the march. Writing the march into an empty target
+     * and then blending that target over the main one gives the same arithmetic as blending the march
+     * straight onto the main one, since a premultiplied colour over nothing is itself, and it keeps the
+     * sky composited exactly once however many pixels it was drawn at.
+     */
+    public static final RenderPipeline ENLARGE = RenderPipeline.builder()
+            .withLocation(VortexDread.id("pipeline/cloud_upscale"))
+            .withVertexShader("core/screenquad")
+            .withFragmentShader(VortexDread.id("core/cloud_upscale"))
+            .withSampler(SMALL)
             .withBlend(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA)
             .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
             .withDepthWrite(false)

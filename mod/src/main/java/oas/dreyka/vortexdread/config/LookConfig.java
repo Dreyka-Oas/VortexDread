@@ -132,4 +132,18 @@ public final class LookConfig {
      * so a file edited by hand cannot turn the sky off.
      */
     public static int cloudQuality = 1;
+
+    /**
+     * How many screen pixels across one pixel of the marched sky covers.
+     *
+     * <p>The march costs the pixel count times the sample budget, and the pixel count falls as the
+     * square of this. Two is a quarter of the work for a loss the eye has trouble finding, because
+     * the thing being drawn at half resolution is a gradient tens of metres wide a kilometre away.
+     * Terrain and entities are drawn after this pass and keep every pixel they had.
+     *
+     * <p>One turns the whole path off: the sky goes straight into the main target with no reduced
+     * one in between and no second pass, which is exactly what the mod did before this option
+     * existed. Above four the cloud stops reading as cloud.
+     */
+    public static int cloudScale = 2;
 }
