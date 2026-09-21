@@ -48,16 +48,20 @@ public final class SkyConfig {
     /**
      * How fast the weather runs against the clock. One is real time.
      *
-     * <p>At one, a cumulus takes the twenty minutes it takes outside: the sky drifts, it does not boil. That
-     * is the sky that was asked for and it is the default. A server that wants weather a player notices inside
-     * one session raises this, and what it buys is fewer ticks between steps rather than a coarser step, so
-     * nothing about the physics changes.
+     * <p>Twenty by default, which is the ceiling, and the reason is what a player sees in their first
+     * minute. Condensation needs about a hundred steps whatever this is set to, since that is how long the
+     * warm air takes to reach its own saturation level. At one that first cloud is seventeen minutes of
+     * staring at an empty sky, and a sky that has not condensed yet is indistinguishable from a mod that
+     * is not working. At twenty it is under a minute, and the weather then goes on changing across a
+     * session instead of holding one shape all evening. What the number buys is fewer ticks between steps
+     * rather than a coarser step, so nothing about the physics changes with it.
      *
-     * <p>It has a ceiling because past it the sky stops being a simulation. Above roughly twenty, the steps
-     * come closer together than the card can finish them and the runner starts skipping, so the weather runs
-     * slower than the number asks for and the clouds jump between the steps that did land.
+     * <p>Lowering it is the setting for someone who wants the real pace and knows to wait. Raising it past
+     * twenty does not work: the steps come closer together than the card can finish them, the runner
+     * starts skipping, and the weather ends up running slower than the number asks for with the clouds
+     * jumping between the steps that did land.
      */
-    public static float skyTimeScale = 1.0f;
+    public static float skyTimeScale = 20.0f;
 
     /**
      * Relaxation passes over the pressure per step.
