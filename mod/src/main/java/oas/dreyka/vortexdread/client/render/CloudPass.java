@@ -35,12 +35,16 @@ public final class CloudPass {
     private static CloudVolume volume;
     private static CloudNumbers numbers;
     private static boolean announced;
+    private static Boolean stoodDown;
 
     private CloudPass() {
     }
 
     /** Called from the mixin, once per frame, with the bundle the level renderer is building. */
     public static void add(FrameGraphBuilder builder, LevelTargetBundle targets, Camera camera) {
+        if (standsDown()) {
+            return;
+        }
         SkyView view = VortexDreadClient.sky().view(partialTick());
         if (view == null || targets.main == null) {
             return;
@@ -62,6 +66,29 @@ public final class CloudPass {
             numbers = null;
         }
         announced = false;
+        stoodDown = null;
+        ShaderPacks.forget();
+    }
+
+    /**
+     * Whether to leave the sky to a shader pack, said out loud the first time and at every change.
+     *
+     * <p>Said at all because the alternative is a player who installed this mod, sees the pack's own
+     * cloud, and reports a bug against the wrong half of their game. One line naming who is drawing
+     * answers it before it is asked.
+     */
+    public static boolean standsDown() {
+        boolean away = ShaderPacks.inUse();
+        if (stoodDown == null || stoodDown != away) {
+            stoodDown = away;
+            if (away) {
+                VortexDread.LOGGER.info("[VortexDread] a shader pack is drawing the sky, so this one is"
+                        + " not. Turn the pack off to get the simulated cloud back.");
+            } else {
+                VortexDread.LOGGER.info("[VortexDread] no shader pack, drawing the simulated cloud.");
+            }
+        }
+        return away;
     }
 
     private static void draw(RenderTarget target, Camera camera, SkyView view) {

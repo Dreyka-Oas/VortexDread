@@ -31,6 +31,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>Sodium is fine with this. It does not take cloud rendering over, it overwrites the method that
  * builds the cloud mesh inside the game's own renderer, and the mesh is never asked for.
+ *
+ * <p>A shader pack is not fine with it, which is why both hooks ask first. A pack draws cloud of its
+ * own and this mod steps aside for it, so cancelling the game's pass on top of that would leave a
+ * player under a pack that reads the vanilla cloud geometry with no cloud at all.
  */
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
@@ -43,7 +47,9 @@ public abstract class LevelRendererMixin {
     private void vortexdread$keepTheSkyClear(FrameGraphBuilder builder, CloudStatus status,
             Vec3 cameraPosition, long gameTime, float partialTick, int cloudColour, float cloudHeight,
             CallbackInfo info) {
-        info.cancel();
+        if (!CloudPass.standsDown()) {
+            info.cancel();
+        }
     }
 
     /**
