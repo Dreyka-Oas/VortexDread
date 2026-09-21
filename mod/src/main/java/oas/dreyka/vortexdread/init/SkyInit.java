@@ -12,6 +12,9 @@ import oas.dreyka.vortexdread.atmosphere.gpu.GpuAtmosphere;
 import oas.dreyka.vortexdread.config.SkyConfig;
 import oas.dreyka.vortexdread.net.SkyBroadcast;
 import oas.dreyka.vortexdread.net.SkyFieldPayload;
+import oas.dreyka.vortexdread.save.SkyPersistence;
+import oas.dreyka.vortexdread.save.SkySavedData;
+import oas.dreyka.vortexdread.save.SkyState;
 
 /**
  * The sky the server owns: opened with the world, stepped with the tick, released with the shutdown.
@@ -39,8 +42,20 @@ public final class SkyInit {
             long seed = server.overworld().getSeed();
             AtmosphereSettings settings = SkyConfig.settings();
             int cadence = SkyConfig.ticksPerStep();
-            runner = new SkyRunner(() -> open(settings, seed), cadence,
-                    sky -> broadcast.pack(sky, cadence));
+            // Read here, on the server thread, because that is where the world's data storage may be
+            // touched. It is a decode of a few tenths of a millisecond; putting the ten megabytes back into
+            // the solver is the expensive half and that happens inside the supplier, on the worker.
+            SkyState saved = SkySavedData.read(server);
+            runner = new SkyRunner(() -> SkyPersistence.resume(open(settings, seed), saved, settings),
+                    cadence, sky -> broadcast.pack(sky, cadence));
+        });
+
+        // The game's own save, which fires on autosave and again on the way down, since stopServer saves
+        // unconditionally. Nothing else writes the sky: a second path would be a second thing to keep true.
+        ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> {
+            if (runner != null) {
+                SkySavedData.store(server, runner, SkyConfig.settings());
+            }
         });
 
         // Ready rather than connected: a payload sent before the client has left the loading screen is a

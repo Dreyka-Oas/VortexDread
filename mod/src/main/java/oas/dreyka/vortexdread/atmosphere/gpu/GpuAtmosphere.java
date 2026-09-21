@@ -84,6 +84,21 @@ public final class GpuAtmosphere implements SkySolver {
         return stepsTaken;
     }
 
+    /**
+     * Pushes a restored grid back onto the device and takes up its count.
+     *
+     * <p>The upload is the whole difference from the processor path: the state lives in device buffers between
+     * steps, so a grid filled on the host is invisible to the card until it is sent. The host copy is marked
+     * fresh rather than stale afterwards, because it is now the same field the device holds and a download
+     * would only fetch back what was just sent.
+     */
+    @Override
+    public void resumeAt(long step) {
+        fields.upload(grid);
+        hostCopyIsStale = false;
+        this.stepsTaken = step;
+    }
+
     @Override
     public float elapsedSeconds() {
         return stepsTaken * settings.timeStep();

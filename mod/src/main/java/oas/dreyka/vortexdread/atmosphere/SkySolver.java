@@ -24,6 +24,19 @@ public interface SkySolver extends AutoCloseable {
 
     long stepsTaken();
 
+    /**
+     * Adopts a grid written from outside and the step count that grid was left on.
+     *
+     * <p>Both together, because the count is state and not a tally. The ground's warm patches drift along a
+     * noise axis driven by the elapsed seconds, so a sky handed its old cells and left counting from zero is
+     * stirred by a pattern from a different afternoon, and it parts from the sky it was meant to resume on
+     * the first step it takes.
+     *
+     * <p>Called before the first step and from the thread that owns the solver, which on the card is the only
+     * thread allowed to touch the queue. Whoever filled the grid is expected to have used {@link #grid()}.
+     */
+    void resumeAt(long step);
+
     /** Simulated seconds since the first step. */
     float elapsedSeconds();
 

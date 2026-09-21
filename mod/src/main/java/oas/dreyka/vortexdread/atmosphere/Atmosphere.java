@@ -68,6 +68,12 @@ public final class Atmosphere implements SkySolver {
         return stepsTaken;
     }
 
+    /** The grid is already the live one here, so resuming is the count and nothing else. */
+    @Override
+    public void resumeAt(long step) {
+        this.stepsTaken = step;
+    }
+
     /** Simulated seconds since the first step. */
     @Override
     public float elapsedSeconds() {

@@ -4,9 +4,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -35,6 +37,7 @@ public final class SkyRunner implements AutoCloseable {
     private final Consumer<SkySnapshot> afterStep;
     private final AtomicReference<String> unreadNotice = new AtomicReference<>();
     private final SkyFeed feed = new SkyFeed();
+    private final WaterMark water = new WaterMark();
 
     private volatile SkySolver solver;
     private Future<?> inFlight;
@@ -45,9 +48,6 @@ public final class SkyRunner implements AutoCloseable {
     // off the landing would run a different clock on every box. Volatile because it is written here on the
     // server thread and read by the worker once the step returns.
     private volatile long ticksAtLastStep;
-
-    // Written by the worker after each step and read by the server thread at shutdown, hence volatile.
-    private volatile float wettestSeen;
 
     public SkyRunner(Supplier<SkySolver> open, int ticksPerStep) {
         this(open, ticksPerStep, snapshot -> {
@@ -120,15 +120,39 @@ public final class SkyRunner implements AutoCloseable {
     }
 
     /**
-     * The most water any one cell has held since the world opened, kilogram per kilogram.
+     * Runs something against the solver on the worker and waits for its answer.
      *
-     * <p>The high-water mark and not the current field, because the question it answers is whether this
-     * sky ever condensed at all. A sky that built cumulus at noon and cleared by evening did, and a
-     * reading taken at shutdown would say the opposite. Zero here means a hundred steps of nothing,
-     * which is a sky closed before its first drop or a simulation that is not running.
+     * <p>Here because the solver belongs to one thread for its whole life, the card's queue being openable
+     * and feedable from that thread alone, and because a caller that wants to read the grid out has no other
+     * legal way to reach it. A function rather than a named operation so this file stays about the clock: what
+     * a caller does with the sky, writing it to a world file among other things, is the caller's subject.
+     *
+     * <p>Waits rather than returning a future. The one caller is a world save, which has to have the state in
+     * hand before it writes, and the wait is the tail of at most one step.
+     *
+     * @return what the function answered, or null when no sky is open, which is a solver still being built or
+     *     one whose step threw
      */
+    public <T> T withSky(Function<SkySolver, T> work) {
+        try {
+            return worker.submit(() -> {
+                SkySolver sky = solver;
+                return sky == null ? null : work.apply(sky);
+            }).get();
+        } catch (ExecutionException failed) {
+            unreadNotice.set("the sky could not be read: " + failed.getCause());
+            return null;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (RejectedExecutionException closed) {
+            return null;
+        }
+    }
+
+    /** Whether this sky ever condensed, as the wettest cell any step of it held. */
     public float wettestSeen() {
-        return wettestSeen;
+        return water.wettest();
     }
 
     @Override
@@ -152,22 +176,9 @@ public final class SkyRunner implements AutoCloseable {
     // than by the feed because this is the last moment the grid is still the state that was just computed.
     private void publish(SkySolver sky) {
         SkySnapshot published = SkySnapshot.of(sky.grid(), sky.stepsTaken());
-        noteWater(published);
+        water.note(published.cloudWater);
         feed.offer(published, ticksAtLastStep, ticksPerStep);
         afterStep.accept(published);
-    }
-
-    // A pass over the field the step just produced. It costs one read of an array already hot in cache,
-    // which is cheaper than the copy taken a line above it, and it runs on the worker rather than the
-    // server thread.
-    private void noteWater(SkySnapshot published) {
-        float wettest = wettestSeen;
-        for (float water : published.cloudWater) {
-            if (water > wettest) {
-                wettest = water;
-            }
-        }
-        wettestSeen = wettest;
     }
 
     // A task that threw leaves the future done and the solver as it was, so without this the sky would go
