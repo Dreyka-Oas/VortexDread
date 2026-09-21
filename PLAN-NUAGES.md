@@ -468,6 +468,44 @@ démarrage. `en_us.json` et `fr_fr.json` restent absents tant qu'aucune chaîne 
 joueur. `SkyView.cloudWaterAt` n'est appelé que par les tests: la correction propre est d'asserter
 sur `view.fraction()` et de supprimer la méthode.
 
+## Ce qui est repris d'Enhanced Weather
+
+Le mod a été lu en entier dans `/tmp/opencode/ew/src`, version 1.1-Alpha2 sous licence MIT, abandonné
+par son auteur au profit de Deluge. Cinq mille lignes de Java dont deux mille six cents de bruit
+jamais appelé. Aucun shader, aucun fichier GLSL: ses nuages sont des cubes opaques de deux blocs de
+côté poussés dans un `VertexBuffer` avec le programme vanilla.
+
+Le rendu n'est pas repris, et la question a été posée. Ses cubes et notre lancer de rayons ne peuvent
+pas être dessinés en même temps, et le choix est resté sur le volumétrique: un nuage qu'on traverse,
+avec de la lumière qui passe au travers, était la demande de départ.
+
+Ce qui est repris est son modèle de données et ses fonctionnalités.
+
+La pluie qui dépend de l'endroit, d'abord. Chez lui `isRaining(world, x, z)` lit une texture de front
+au-dessus du joueur et décide s'il pleut là plutôt que partout. Minecraft de base n'a qu'un
+interrupteur pour la carte entière, et nous non plus jusqu'ici. Nous avons mieux que sa texture: le
+champ dit déjà combien d'eau est condensée au-dessus de chaque point, à la cellule près, et cette
+information ne servait à rien. Ce qu'il faut construire est une carte de colonnes, une valeur par
+couple de coordonnées horizontales, calculée sur le worker au moment où le pas se publie. Le client
+reçoit déjà le champ entier, donc la pluie localisée ne coûte pas un octet de plus sur le réseau,
+là où lui doit diffuser un décalage chaque seconde.
+
+Son seuil mobile de couverture, ensuite. `lerp(rainFront, 1.3, 0.5)` fait que le ciel clair laisse
+passer presque rien et que le front pluvieux couvre tout, avec une seule interpolation. Le principe
+valable est qu'un même champ rende deux ciels selon un scalaire de conditions.
+
+Sa grille torique de morceaux avec un seul reconstruit par image, enfin, si un jour le champ dépasse
+ce qu'une texture unique tient: `getIndex` enroulé, tri des décalages par distance croissante, drapeau
+qui coupe après le premier. Trois mécanismes qui bornent le pire cas sans jamais réallouer.
+
+Ce qui vient de lui côté fonctionnalités et qui n'existe pas encore ici: le bloc radar et son écran de
+réflectivité, les particules de pluie orientées par le vent, la grêle, l'arc-en-ciel après l'averse,
+le vent exposé aux autres mods. Son vent est une marche aléatoire à deux scalaires et le nôtre est un
+champ de vitesse tridimensionnel: l'idée à prendre est de l'exposer, pas sa méthode.
+
+Deux choses à ne pas copier. `hasCloudBlock` réévalue la densité complète quatre fois par voxel de
+surface alors que l'information est déjà dans le tableau, et `FastNoiseLite.java` est mort.
+
 ## Sources
 
 - [Harris et al., Simulation of Cloud Dynamics on Graphics Hardware, 2003](http://markmark.net/cloudsim/harrisGH2003.pdf)
