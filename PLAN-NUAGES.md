@@ -368,6 +368,24 @@ jeu plutôt qu'une nôtre. On se branche sur `SavedData` comme `PhaseSavedData` 
 LethalBreed: le ciel est écrit quand Minecraft écrit, à l'autosauvegarde comme à la fermeture, et rien
 ne double son mécanisme. La parité reste entière, ce qui était la raison de refuser la quantification.
 
+L'encodage coûte 2,46 ms pour les 442368 cellules, soit cinq pour cent d'un tick, et c'est la seule
+part qui tombe sur le thread serveur: le gzip et le disque partent déjà dans un futur du jeu, ce que
+le bytecode de `DimensionDataStorage.scheduleSave` confirme. Pas besoin de préparer la copie sur le
+worker. Le `.dat` étant déjà gzippé par le jeu, rien n'est compressé une seconde fois.
+
+La grille n'est pas tout l'état, et c'est le test des dix pas après relecture qui l'a montré en
+échouant. Le motif thermique du sol dérive avec le temps écoulé, donc un champ restauré avec un
+compteur de pas remis à zéro se fait brasser par un sol d'une autre heure et diverge dès le premier
+pas. D'où `resumeAt` sur les deux chemins. Un test qui compare seulement le champ relu au champ écrit
+n'aurait rien vu: il faut le faire tourner après.
+
+Le refus d'une relecture ne regarde pas que les trois tailles de grille. L'atmosphère de référence
+contre laquelle chaque terme de flottabilité se mesure est calculée depuis la température de surface,
+la couche de mélange, le gradient et l'humidité, donc un champ sauvé sous un profil et relu sous un
+autre est en déséquilibre dans toutes ses cellules à la fois et se mettrait à convecter sans raison
+visible. Les neuf valeurs sont comparées, pas hachées: une collision restaurerait un ciel dans la
+mauvaise atmosphère.
+
 Reste à faire: demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage.
 
 Deux mesures qui ne concernent pas le rendu mais que le rendu a rendues visibles.
@@ -437,6 +455,18 @@ Les phases 1 à 5 sont faites. La 6 commence sur un champ qui arrive déjà côt
 plus rien à attendre. Un point à trancher en l'ouvrant: l'interopérabilité OpenCL et OpenGL est morte
 en chemin, puisque le champ traverse le réseau au lieu de rester sur la carte du serveur, donc le
 client téléverse une texture 3D depuis la mémoire hôte comme n'importe quel autre mod.
+
+## Pour l'audit de la phase 8
+
+Six fichiers passent le plafond de cent cinquante lignes et attendent un découpage par
+responsabilité, jamais par nombre de lignes: `SkyRunner` à 204, `AtmosphereGrid` à 187,
+`GpuAtmosphere` à 173, `SkyConfig` à 171, `Atmosphere` à 164, `sky_transport.cl` à 165 et
+`sky_common.cl` à 162. `WaterMark` a déjà été sorti de `SkyRunner` pour cette raison.
+
+Le jeu de sources `dev` est vide et Fabric se plaint d'entrées de chemin de classe absentes à chaque
+démarrage. `en_us.json` et `fr_fr.json` restent absents tant qu'aucune chaîne n'est visible par un
+joueur. `SkyView.cloudWaterAt` n'est appelé que par les tests: la correction propre est d'asserter
+sur `view.fraction()` et de supprimer la méthode.
 
 ## Sources
 
