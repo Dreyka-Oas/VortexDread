@@ -15,7 +15,7 @@ layout(std140) uniform CloudSky {
     vec4 SkyLight;        // rgb what lights the side the sun never reaches, w spare
     vec4 CloudBand;       // x the lowest metre holding water, y the highest, zw spare
     vec4 CloudDetail;     // x one over the detail's wavelength, y how hard it bites, zw spare
-    vec4 CloudScatter;    // x the forward lobe, y the backward one, zw spare
+    vec4 CloudScatter;    // x the forward lobe, y the backward one, z steps down the view, w at the sun
 };
 
 // The two steps the server sent, each an atlas of tiles, four altitudes per texel.

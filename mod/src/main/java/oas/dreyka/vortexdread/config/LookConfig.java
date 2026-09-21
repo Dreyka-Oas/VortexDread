@@ -124,4 +124,12 @@ public final class LookConfig {
      * and that face goes flat again.
      */
     public static float cloudBackScatter = -0.15f;
+
+    /**
+     * Which sample budget the march runs on: nought low, one medium, two high.
+     *
+     * <p>What it buys is in {@code CloudQuality}. Anything outside the three lands on the nearest,
+     * so a file edited by hand cannot turn the sky off.
+     */
+    public static int cloudQuality = 1;
 }

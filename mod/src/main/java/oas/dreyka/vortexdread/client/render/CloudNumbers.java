@@ -42,6 +42,7 @@ public final class CloudNumbers implements AutoCloseable {
         SkySnapshot sky = view.to();
         CloudAtlas atlas = volume.atlas();
         CloudLight light = CloudLight.of(camera, partialTick);
+        CloudQuality budget = CloudQuality.of(LookConfig.cloudQuality);
         Vector3fc forward = camera.forwardVector();
         Vector3fc up = camera.upVector();
         Vector3fc left = camera.leftVector();
@@ -69,7 +70,7 @@ public final class CloudNumbers implements AutoCloseable {
                     .putVec4(1.0f / Math.max(1.0f, LookConfig.cloudDetailMetres),
                             LookConfig.cloudErosion, 0.0f, 0.0f)
                     .putVec4(LookConfig.cloudForwardScatter, LookConfig.cloudBackScatter,
-                            0.0f, 0.0f);
+                            budget.viewSteps, budget.lightSteps);
         }
         return buffer;
     }

@@ -9,11 +9,6 @@ in vec2 texCoord;
 
 out vec4 fragColor;
 
-// Along the view. Deliberately coarse and deliberately fixed: the jitter, the reprojection and the
-// quality levels are a later pass. What keeps this usable at sixty-four is that the march is clipped
-// to the altitudes that actually hold water, so the steps land in the cloud instead of around it.
-const int STEPS = 64;
-
 // Below this the cloud in front has swallowed everything behind and the rest of the march is arithmetic
 // on a number nobody will see.
 const float OPAQUE = 0.004;
@@ -57,16 +52,17 @@ void main() {
         discard;
     }
 
-    // Once per pixel and not once per step: the lobe only depends on the angle between the view and
-    // the sun, and that angle is the same the whole way down a straight ray.
-    float phase = phaseAt(ray);
+    vec3 lobes = lobesAt(ray);
 
-    // Beer and Lambert down the view, and the same again at each step towards the sun.
-    float span = (leave - enter) / float(STEPS);
+    // Beer and Lambert down the view, and the same again at each step towards the sun. What keeps a
+    // budget this coarse usable is that the march is clipped to the altitudes that actually hold
+    // water, so the steps land in the cloud instead of around it.
+    int steps = int(CloudScatter.z);
+    float span = (leave - enter) / float(steps);
     float start = enter + dither(gl_FragCoord.xy) * span;
     float transmittance = 1.0;
     vec3 scattered = vec3(0.0);
-    for (int step = 0; step < STEPS; step++) {
+    for (int step = 0; step < steps; step++) {
         vec3 at = CameraInVolume.xyz + ray * (start + float(step) * span);
         // Eroded down the view but not towards the sun: the shadow a cloud casts on itself is a low
         // frequency thing, and paying for the detail seven times over would not change it.
@@ -79,10 +75,10 @@ void main() {
         // here and not how finely this frame chose to sample it. Over a step it would change the look
         // of the sky every time the quality setting moved.
         float powder = 1.0 - exp(-2.0 * water * VolumeCells.w * CameraInVolume.w);
-        // The lobe applies to the sun and not to the sky. One comes from a direction, so how the
-        // droplet redirects it depends on where you stand; the other arrives from everywhere at
-        // once and comes out the same whichever way you look.
-        vec3 lit = SunLight.rgb * sunReach(at) * mix(1.0, powder, SunLight.w) * phase + SkyLight.rgb;
+        // The lobes ride inside the sun term and nowhere else. Light from a direction comes back
+        // differently depending on where you stand; the sky arrives from everywhere at once and
+        // comes out the same whichever way you look.
+        vec3 lit = SunLight.rgb * sunReach(at, lobes) * mix(1.0, powder, SunLight.w) + SkyLight.rgb;
         // The exact integral over the step rather than a rectangle at its middle, which is what stops
         // a coarse march from drawing the cloud in bands of its own step size.
         scattered += transmittance * lit * (1.0 - stepThrough);
