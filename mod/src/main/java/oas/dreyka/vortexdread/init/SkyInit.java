@@ -67,11 +67,14 @@ public final class SkyInit {
             if (runner == null) {
                 return;
             }
-            // The count rather than a farewell. It is the one number that says the sky kept up: divide it by
-            // how long the world was open and compare against the cadence, and a sky that spent the session
-            // skipping shows as a count well under what the ticks bought.
-            VortexDread.LOGGER.info("[VortexDread] sky stepped {} times, sent {}", runner.stepsTaken(),
-                    broadcast.tally());
+            // Two numbers rather than a farewell. The count says the sky kept up: divide it by how long
+            // the world was open and compare against the cadence, and a sky that spent the session
+            // skipping shows as a count well under what the ticks bought. The water says the sky ran at
+            // all, which the count cannot: condensation starts around the hundredth step, so a world
+            // closed before that and a simulation doing nothing both print a plausible count and an
+            // empty screen, and one of those was read as the other.
+            VortexDread.LOGGER.info("[VortexDread] sky stepped {} times, sent {}, wettest cell {}",
+                    runner.stepsTaken(), broadcast.tally(), runner.wettestSeen());
             runner.close();
             runner = null;
             broadcast.forget();

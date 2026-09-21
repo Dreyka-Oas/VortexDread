@@ -46,6 +46,9 @@ public final class SkyRunner implements AutoCloseable {
     // server thread and read by the worker once the step returns.
     private volatile long ticksAtLastStep;
 
+    // Written by the worker after each step and read by the server thread at shutdown, hence volatile.
+    private volatile float wettestSeen;
+
     public SkyRunner(Supplier<SkySolver> open, int ticksPerStep) {
         this(open, ticksPerStep, snapshot -> {
         });
@@ -116,6 +119,18 @@ public final class SkyRunner implements AutoCloseable {
         return sky == null ? 0L : sky.stepsTaken();
     }
 
+    /**
+     * The most water any one cell has held since the world opened, kilogram per kilogram.
+     *
+     * <p>The high-water mark and not the current field, because the question it answers is whether this
+     * sky ever condensed at all. A sky that built cumulus at noon and cleared by evening did, and a
+     * reading taken at shutdown would say the opposite. Zero here means a hundred steps of nothing,
+     * which is a sky closed before its first drop or a simulation that is not running.
+     */
+    public float wettestSeen() {
+        return wettestSeen;
+    }
+
     @Override
     public void close() {
         worker.submit(() -> {
@@ -137,8 +152,22 @@ public final class SkyRunner implements AutoCloseable {
     // than by the feed because this is the last moment the grid is still the state that was just computed.
     private void publish(SkySolver sky) {
         SkySnapshot published = SkySnapshot.of(sky.grid(), sky.stepsTaken());
+        noteWater(published);
         feed.offer(published, ticksAtLastStep, ticksPerStep);
         afterStep.accept(published);
+    }
+
+    // A pass over the field the step just produced. It costs one read of an array already hot in cache,
+    // which is cheaper than the copy taken a line above it, and it runs on the worker rather than the
+    // server thread.
+    private void noteWater(SkySnapshot published) {
+        float wettest = wettestSeen;
+        for (float water : published.cloudWater) {
+            if (water > wettest) {
+                wettest = water;
+            }
+        }
+        wettestSeen = wettest;
     }
 
     // A task that threw leaves the future done and the solver as it was, so without this the sky would go
