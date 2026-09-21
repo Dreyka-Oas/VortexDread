@@ -287,12 +287,36 @@ entier a mesuré d'anciens nombres pendant que la source en portait de nouveaux.
 lire `run/config/oas/vortexdread.json`, et se souvenir que `--both` en a deux, le client dans
 `run/config` et le serveur dédié dans `run/server/config`.
 
+La diffusion avant est faite, par deux lobes de Henyey et Greenstein mêlés à moitié, six dixièmes
+vers l'avant et un octième et demi vers l'arrière. Le lobe est mis à l'échelle pour qu'une
+gouttelette diffusant également dans toutes les directions réponde un, ce qui veut dire qu'éteindre
+la diffusion ne peut pas changer la luminosité du ciel. Le quart de pi de la forme usuelle
+appartient à une intégrale de luminance que cette marche n'écrit jamais.
+
+Huit dixièmes serait la valeur honnête pour une gouttelette d'eau. Elle multiplie la lumière par
+quarante-cinq quand on regarde le soleil à travers un nuage mince, ce qu'aucune image en huit bits
+ne tient, d'où six.
+
+Le lobe s'applique une fois par octave de la diffusion multiple et non une fois pour toutes, et
+c'est la deuxième version qui est la bonne. Un photon qui a rebondi quatre fois a oublié par où il
+entrait, donc le lobe qui le concerne est plus plat que celui de la lumière venue droit du soleil.
+Appliqué en bloc, le pic avant se retrouvait collé sur la part diffuse et le ciel à quatre-vingt-dix
+degrés du soleil descendait sous zéro virgule sept de ce qu'il vaut, plus sombre qu'aucun nuage.
+Par octave, avec une excentricité divisée par deux à chaque fois, ce creux remonte à zéro virgule
+huit et le pic avant s'adoucit de cinq à trois fois et demie.
+
+Trois budgets d'échantillons sont réglables, bas, moyen, haut, par un seul nombre dans la config.
+Chacun porte deux comptes plutôt qu'un: les pas descendus le long du regard, qui décident si un
+nuage a un corps lisse ou des tranches, et les pas montés vers le soleil, qui décident de la
+profondeur sur laquelle il s'ombre lui-même. Les seconds doublent leur portée à chaque fois, donc
+leur nombre fixe une distance et non une finesse: quatre voient les sept cent cinquante premiers
+mètres d'eau, huit en voient près de treize mille.
+
 Reste à faire, dans cet ordre:
 
-- diffusion avant par Henyey-Greenstein à deux lobes, un pour le halo solaire, un pour les bords
-  d'argent, sans quoi un coucher de soleil ne donne rien;
 - demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage;
-- réglage bas, moyen, haut dans la config, le bas visant une machine modeste.
+- la collision avec les paquets de shaders, dont `patches/photon/` de l'ancien mod est le
+  précédent.
 
 Deux mesures qui ne concernent pas le rendu mais que le rendu a rendues visibles.
 
@@ -317,13 +341,21 @@ sous la caméra. C'est la marche qui s'allonge: le pas vaut la traversée divis�
 donc il grandit avec l'obliquité, et le tramage par pixel convertit la bande en filet plutôt que de
 la supprimer. Le hachage du bruit a été corrigé au passage pour une raison indépendante, un produit
 à trois termes qui ne laissait que six bits de mantisse et donc soixante-quatre valeurs distinctes,
-mais cette correction n'a rien changé au rayage, ce qui écarte le bruit comme cause. La réponse est
-la demi-résolution, qui paie les pas manquants, et elle est déjà sur la liste.
+mais cette correction n'a rien changé au rayage, ce qui écarte le bruit comme cause.
 
-Le coût, mesuré sur la RX 570 et non sur la 9060 XT, puisque c'est la carte des essais: quarante-neuf
-images par seconde au sol à midi, cinquante-neuf vu de mille blocs, centile bas à huit et seize
-respectivement. À lire en sachant que cette carte tient sur une seule ligne PCIe et que l'écran est
-piloté par l'autre, donc chaque image finie retraverse ce fil avant d'être affichée. Le chiffre
+Le réglage de qualité a servi à le prouver plutôt qu'à le supposer. Même monde, même pas, même
+point de vue à mille blocs: à soixante-quatre pas le filet court sur toute la bande lointaine, à
+cent vingt-huit il faiblit nettement. Ce n'est donc pas un motif d'écran ni un défaut du champ, c'est
+la marche qui manque des pas. La demi-résolution reste la réponse économique, puisqu'elle achète les
+pas ailleurs, mais elle n'est plus urgente: la 570 tient soixante images en haute qualité.
+
+Le coût, mesuré sur la RX 570 et non sur la 9060 XT, puisque c'est la carte des essais. En moyenne
+qualité, soixante images par seconde partout, centile bas à cinquante et un vu de mille blocs et à
+treize au sol face au soleil bas, qui est le pire cas puisque le lobe avant y allume tout. En haute
+qualité, soixante encore, centile bas descendu à trente-sept et vingt. Le doublement des pas coûte
+donc environ un quart du centile bas et ne coûte rien à la moyenne. À lire en sachant que cette
+carte tient sur une seule ligne PCIe et que l'écran est piloté par l'autre, donc chaque image finie
+retraverse ce fil avant d'être affichée. Le chiffre
 mesure le couple carte plus fil, ce qui est justement ce qu'une machine modeste subit.
 
 Une leçon de la première vérification, qui coûte une heure à qui la répète: le client de test a Photon
