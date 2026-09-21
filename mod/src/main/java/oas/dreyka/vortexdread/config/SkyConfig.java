@@ -48,20 +48,23 @@ public final class SkyConfig {
     /**
      * How fast the weather runs against the clock. One is real time.
      *
-     * <p>Twenty by default, which is the ceiling, and the reason is what a player sees in their first
-     * minute. Condensation needs about a hundred steps whatever this is set to, since that is how long the
-     * warm air takes to reach its own saturation level. At one that first cloud is seventeen minutes of
-     * staring at an empty sky, and a sky that has not condensed yet is indistinguishable from a mod that
-     * is not working. At twenty it is under a minute, and the weather then goes on changing across a
-     * session instead of holding one shape all evening. What the number buys is fewer ticks between steps
-     * rather than a coarser step, so nothing about the physics changes with it.
+     * <p>Seventy-two by default, which is not an arbitrary dial but the speed of the game's own clock: a
+     * Minecraft day is twenty minutes against twenty-four hours. Anything slower and the sky contradicts
+     * the sun crossing it, a cumulus taking three game days to build where the real one takes an
+     * afternoon. Tying the two together is what makes the weather read as weather rather than as a
+     * separate thing drifting overhead.
      *
-     * <p>Lowering it is the setting for someone who wants the real pace and knows to wait. Raising it past
-     * twenty does not work: the steps come closer together than the card can finish them, the runner
-     * starts skipping, and the weather ends up running slower than the number asks for with the clouds
-     * jumping between the steps that did land.
+     * <p>It also settles the wait. Condensation needs about a hundred steps whatever this is set to,
+     * since that is how long warm air takes to climb to its own saturation level. At real time that is
+     * seventeen minutes of empty sky, which is indistinguishable from a mod that does not work; at the
+     * game's own pace it is fifteen seconds.
+     *
+     * <p>The ceiling is what the card can finish. At seventy-two the steps are three ticks apart and the
+     * card needs two and a half milliseconds, sixty times under budget, so the room is in the step count
+     * rather than the clock. Past the ceiling the runner would skip, and a skipped step makes the weather
+     * run slower than the number asks for with the cloud jumping between the steps that did land.
      */
-    public static float skyTimeScale = 20.0f;
+    public static float skyTimeScale = 72.0f;
 
     /**
      * Relaxation passes over the pressure per step.
@@ -131,6 +134,9 @@ public final class SkyConfig {
     /** How much moister they are, as a fraction of the surface value. */
     public static float thermalDampness = 0.3f;
 
+    /** Past this the steps would fall closer than one tick, which no cadence counted in ticks can hold. */
+    private static final float FASTEST = 200.0f;
+
     /**
      * Server ticks between two steps, which is the only place Minecraft's clock meets the simulation's.
      *
@@ -139,7 +145,7 @@ public final class SkyConfig {
      * a sky that slows down with it rather than one that keeps jumping ahead of the frames.
      */
     public static int ticksPerStep() {
-        float scale = Math.min(20.0f, Math.max(0.05f, skyTimeScale));
+        float scale = Math.min(FASTEST, Math.max(0.05f, skyTimeScale));
         return Math.max(1, Math.round(secondsPerStep * 20.0f / scale));
     }
 
