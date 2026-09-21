@@ -330,6 +330,44 @@ pack laisserait sans aucun nuage le joueur dont le pack lit cette géométrie. E
 part à chaque changement d'état, parce que sinon le joueur voit les nuages du pack, croit voir les
 nôtres, et ouvre son rapport de bug contre la mauvaise moitié de son jeu.
 
+### Cent pas avant la première goutte
+
+Une session de test a conclu à une panne de la carte alors que rien n'était cassé. Le monde avait
+été fermé au pas 101, et le pas 101 est celui où la première goutte condense. La mesure, chemin
+processeur, config expédiée: rien jusqu'au pas 100 inclus, 4,4e-5 au 101, 4,87e-4 au 110, 1,17e-3 au
+130. Le pas du premier grain bouge entre 98 et 115 selon la graine du monde.
+
+Cent pas, c'est le temps qu'il faut à l'air chaud pour monter jusqu'à son propre niveau de
+saturation, et ce nombre ne dépend pas de la vitesse réglée. Ce qui en dépend, c'est l'attente que le
+joueur subit: dix-sept minutes à la vitesse réelle, moins d'une minute à vingt fois. La valeur par
+défaut passe donc à vingt, qui est aussi le plafond, parce qu'un ciel qui n'a pas fini de monter et un
+mod qui ne marche pas se ressemblent trop pour qu'on impose dix-sept minutes à quelqu'un qui découvre.
+
+Le vrai défaut était ailleurs, dans le journal. La ligne de fermeture comptait les pas et rien
+d'autre, donc un monde fermé trop tôt et une simulation morte s'y lisaient pareil. Elle porte
+maintenant la cellule la plus humide vue depuis l'ouverture, un maximum courant et non la dernière
+valeur, puisqu'un ciel qui a fait des cumulus à midi et s'est dégagé le soir a bien condensé.
+
+La parité entre les deux cartes a été vérifiée à cette occasion, sur la vraie grille et non sur la
+petite: 130 pas enchaînés, zéro cellule divergente sur 442368, pour les quatre champs. Le passage de
+la RX 570 à la 9060 XT ne change rien, et les kernels ne présument aucune largeur d'onde.
+
+### La météo ne survivait pas à la déconnexion
+
+Le ciel repartait de zéro à chaque ouverture de monde, avec ses cent pas à refaire. Trois pistes ont
+été mesurées avant d'en choisir une.
+
+Rejouer les pas depuis la graine est éliminé par son coût: 0,298 s par pas sur le processeur, donc
+trente-six minutes de rattrapage pour une heure de monde, et le coût grandit sans borne avec l'âge de
+la sauvegarde. Quantifier les champs est éliminé par la physique elle-même: l'atmosphère est
+chaotique, une erreur de 1e-7 introduite à l'écriture atteint 111 pour cent du pic en cent pas, et
+passer de huit à seize bits ne retarde presque rien. Compacité et parité ne peuvent pas coexister ici.
+
+Restent les flottants exacts, 7,2 Mo une fois déflatés sur un ciel nuageux, et la cadence est celle du
+jeu plutôt qu'une nôtre. On se branche sur `SavedData` comme `PhaseSavedData` le fait dans
+LethalBreed: le ciel est écrit quand Minecraft écrit, à l'autosauvegarde comme à la fermeture, et rien
+ne double son mécanisme. La parité reste entière, ce qui était la raison de refuser la quantification.
+
 Reste à faire: demi-résolution, reprojection temporelle et bruit bleu sur l'échantillonnage.
 
 Deux mesures qui ne concernent pas le rendu mais que le rendu a rendues visibles.
